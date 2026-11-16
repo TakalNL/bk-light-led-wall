@@ -1,12 +1,10 @@
 """STARFALL desktop shooter: python -m games.starfall.app."""
 
-import argparse
-import logging
-from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
 from .game import Shooter, flight_png, render_flight
+from games.common.launch import launch_game
 from games.common.app import GameApp
 
 
@@ -73,23 +71,7 @@ class ShooterApp(GameApp):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--device',default='')
-    parser.add_argument('--connect',action='store_true')
-    parser.add_argument('--preview',action='store_true')
-    parser.add_argument('--capture-dir',type=Path,default=Path('captures'))
-    args = parser.parse_args()
-    args.capture_dir.mkdir(parents=True,exist_ok=True)
-    logging.basicConfig(filename=args.capture_dir/'starfall-errors.log',level=logging.ERROR)
-    root = tk.Tk()
-    def callback_error(error_type,value,traceback):
-        logging.error('Starfall UI error',exc_info=(error_type,value,traceback))
-        app.game.pause()
-        app.connection_status.set('An app error occurred; see starfall-errors.log.')
-    root.report_callback_exception = callback_error
-    app = ShooterApp(root,capture_dir=args.capture_dir,device=args.device,
-                     connect=args.connect,preview=args.preview)
-    root.mainloop()
+    launch_game(ShooterApp, description=__doc__)
 
 
 if __name__ == '__main__': main()

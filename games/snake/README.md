@@ -1,74 +1,24 @@
-# Snake: first playable prototype
+# Snake
 
-A Windows desktop game for the verified 64×16 B.K. Light panel. The PC handles
-keyboard input and game rules; the panel receives complete RGB PNG images using
-the tested acknowledged transport. A local game preview works without Bluetooth.
+Double-click **Start Snake.cmd**, connect the panel, click the preview and press
+**Space**. Or choose **Play on PC only**. Installation is in the [root README](../../README.md).
 
-## Play in this checkout
+- **Space:** start, pause or resume.
+- **Arrows / WASD:** steer; reversal into the neck is rejected.
+- **R / New game:** reset; Space starts again.
+- **Escape:** pause. Losing focus or the panel connection also pauses.
+- **Moves / sec:** 3-8, default 5. This is separate from panel output rate.
 
-Double-click **Start Snake.cmd**. It uses the existing project environment and
-remembers the selected panel privately in `captures/snake-settings.json`.
-On first use, enter the panel identifier or exact advertised name and click
-**Connect panel**. The current owner's checkout is configured locally.
+The board has 32x8 cells, each occupying 2x2 LEDs. Red is food, pale green is
+the head and green is the body. Walls and body collisions end the run. Score
+stays on the PC.
 
-- Click the game preview, then **Space** to start, pause or resume.
-- **Arrow keys / WASD** steer. Direct reversal into the neck is rejected.
-- **R / New game** resets the board; press Space to start again.
-- Red is food, pale green is the head, green is the body. Walls and body are fatal.
-- The board is 32×8 cells, each occupying 2×2 LEDs. Score stays on the PC.
-- Start at **5 moves/sec**; the selector supports 3–8. Losing window focus pauses.
-- **Play on PC only** disconnects the panel and enables local play.
+Choose **Panel updates** while disconnected: Standard targets 10 uploads/s;
+Windows targets 12 after negotiation and otherwise falls back to Standard.
+Both send acknowledged RGB PNGs in non-saving slot 0, preserving the startup
+GIF. Unsent states are replaced; there is one upload in flight. Reconnect
+explicitly after a failure, then press Space to resume. The panel keeps its
+last image when idle or disconnected.
 
-The game starts ready, with no automatic movement. A lost connection or invalid
-image reply pauses play; reconnect explicitly, then press Space to resume. It
-does not reset or clear panel storage, save a game in a persistent slot, or
-replace the saved startup GIF. Closing disconnects the worker. The last game
-image may remain on the panel until another upload or power cycle.
-
-## Setup elsewhere
-
-Requires CPython 3.11+ with Tk, Windows Bluetooth, and this source checkout:
-
-Run these commands from the repository root:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e '.[game]'
-.\.venv\Scripts\python.exe -m games.snake.app
-# Local play, without scanning or connecting:
-.\.venv\Scripts\python.exe -m games.snake.app --preview
-```
-
-The base package pins the inspected `pypixelcolor` source commit and requires
-Git to install it. The `game` extra supplies the game-specific dependencies.
-Games and experiments use the same upstream builders, ACK manager and
-send loop through our Windows connection adapter. The public `AsyncClient` has
-passed basic connect/reconnect and PNG/GIF checks. A subsequent
-[Starfall streaming comparison](../../STARFALL_STREAM_TESTS.md) favored keeping
-the adapter for timing headroom; Snake's public-client path remains untested.
-This is a source prototype; no standalone installer
-or broad device-compatibility claim is included.
-
-## Streaming and checks
-
-One continuous connection, acknowledged RGB PNG uploads, non-saving slot 0 and
-at most ten uploads per second by default. The optional
-[Windows profile](../common/README.md#panel-update-profiles) targets twelve when
-its connection preference is negotiated. Idle boards are not repeatedly uploaded. There
-is one image in flight; newer game states replace unsent ones. A slow frame does
-not end the game or create a backlog of old boards. Display timing can differ
-from the PC preview; the timing shown in the window is the image reply time,
-not measured keyboard-to-LED latency.
-
-Connection, full transmitted bytes, image replies, frame timing and skipped
-updates are recorded in ignored `captures/snake-*.jsonl`. App exceptions go to
-`captures/snake-errors.log`. Logs include the target identifier and should be
-reviewed before sharing. App-generated graphics use no downloaded artwork.
-
-Tests cover growth, queued turns, collisions, legal tail movement, full-board
-completion, RGB frame bounds, single-flight/latest-state streaming, bad replies
-and idle disconnection. The UI also has a hidden-window control smoke check.
-The earlier five-minute transport test passed 3000/3000 images; its final frame
-was visually confirmed, but the owner was absent during the run. The owner then
-confirmed the Snake prototype worked. Detailed input-to-display timing and
-long-duration visual smoothness remain uninstrumented.
+Settings live in `.state/panel-settings.json`, summaries in `captures/`.
+See [validation](../../docs/validation.md) for evidence and limitations.

@@ -11,7 +11,7 @@ from PIL import Image, ImageTk
 
 from .panel import LatestBoard, PanelWorker
 from .profiles import STANDARD, available_profiles
-from .settings import load_panel_settings, save_panel_settings
+from .settings import load_or_migrate_panel_settings, save_panel_settings
 
 
 BACKGROUND = '#101820'
@@ -35,12 +35,14 @@ class GameApp:
     speeds = ()
     active_phases = ('running',)
 
-    def __init__(self, root, *, capture_dir, device='', connect=False, preview=False):
+    def __init__(self, root, *, capture_dir, device='', connect=False, preview=False,
+                 settings_path=None, trace_packets=False):
         self.root = root
         self.capture_dir = Path(capture_dir)
         self.capture_dir.mkdir(parents=True,exist_ok=True)
-        self.settings = self.capture_dir/'snake-settings.json'
-        saved = load_panel_settings(self.settings)
+        self.settings = Path(settings_path) if settings_path is not None else Path('.state/panel-settings.json')
+        saved = load_or_migrate_panel_settings(self.settings,self.capture_dir/'snake-settings.json')
+        self.trace_packets = trace_packets
         if not device: device = saved['device']
         self.stream_profiles = available_profiles()
         selected = next((p for p in self.stream_profiles if p.key == saved['stream_profile']), STANDARD)
@@ -224,7 +226,8 @@ class GameApp:
         stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
         path = self.capture_dir/f'{self.log_name}-{stamp}.jsonl'
         self.worker = PanelWorker(device,self.mailbox,self.events,path,
-                                  encode=self.encode,game_name=self.log_name,profile=profile.key)
+                                  encode=self.encode,game_name=self.log_name,profile=profile.key,
+                                  trace_packets=self.trace_packets)
         self.worker.start()
         self.canvas.focus_set()
 

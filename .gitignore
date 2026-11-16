@@ -8,6 +8,8 @@ __pycache__/
 .ruff_cache/
 build/
 dist/
+.state/
+archive/private/
 captures/*
 !captures/README.md
 !captures/experiment-template.csv

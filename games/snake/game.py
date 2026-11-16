@@ -7,7 +7,7 @@ import random
 
 from PIL import Image, ImageDraw
 
-from led_matrix_hacker.animation import DIGITS
+from led_matrix_hacker.graphics import DIGITS
 
 WIDTH, HEIGHT = 32, 8
 DIRECTIONS = {'up': (0,-1), 'down': (0,1), 'left': (-1,0), 'right': (1,0)}

@@ -6,7 +6,7 @@ import math
 
 from PIL import Image, ImageDraw
 
-from led_matrix_hacker.animation import DIGITS
+from led_matrix_hacker.graphics import DIGITS
 
 DT = .05
 SPRITES = {

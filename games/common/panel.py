@@ -5,7 +5,7 @@ import math
 from pathlib import Path
 import threading
 
-from led_matrix_hacker.experiments import Recorder
+from led_matrix_hacker.recording import Recorder
 
 from .profiles import PROFILES, game_stream_profile
 
@@ -71,11 +71,13 @@ async def stream_boards(link, mailbox, stop, emit, record, *, encode, game_name=
 
 
 class PanelWorker:
-    def __init__(self, device, mailbox, events, log_path, *, encode, game_name='game', profile='standard'):
+    def __init__(self, device, mailbox, events, log_path, *, encode, game_name='game', profile='standard',
+                 trace_packets=False):
         if profile not in PROFILES:
             raise ValueError('Unknown game streaming profile.')
         self.device,self.mailbox,self.events,self.log_path = device,mailbox,events,Path(log_path)
         self.profile = profile
+        self.trace_packets = trace_packets
         self.stop = threading.Event()
         self.encode,self.game_name = encode,game_name
         self.thread = threading.Thread(target=self._thread_main,daemon=True,name=game_name+'-bluetooth')
@@ -89,7 +91,7 @@ class PanelWorker:
     def _thread_main(self):
         try:
             with self.log_path.open('x',encoding='utf-8') as output:
-                record = Recorder(output, echo=False)
+                record = Recorder(output, echo=False, trace_packets=self.trace_packets)
                 record(self.game_name+'_session_started')
                 try:
                     asyncio.run(self._run(record))

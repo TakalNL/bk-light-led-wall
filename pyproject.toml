@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "led-matrix-hacker"
 version = "0.1.0"
-description = "BLE discovery and supervised display experiments for a B.K. Light LED matrix"
+description = "Desktop games and BLE diagnostics for the B.K. Light LED matrix"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

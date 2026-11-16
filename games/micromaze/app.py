@@ -1,15 +1,13 @@
 """MICROMAZE desktop controller: python -m games.micromaze.app."""
 
-import argparse
-import logging
 import math
-from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
 from PIL import ImageTk
 
 from .game import Maze, render_map, render_view, view_png
+from games.common.launch import launch_game
 from games.common.app import BACKGROUND, GameApp
 
 
@@ -107,23 +105,7 @@ class MazeApp(GameApp):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--device',default='')
-    parser.add_argument('--connect',action='store_true')
-    parser.add_argument('--preview',action='store_true')
-    parser.add_argument('--capture-dir',type=Path,default=Path('captures'))
-    args = parser.parse_args()
-    args.capture_dir.mkdir(parents=True,exist_ok=True)
-    logging.basicConfig(filename=args.capture_dir/'micromaze-errors.log',level=logging.ERROR)
-    root = tk.Tk()
-    def callback_error(error_type,value,traceback):
-        logging.error('Micromaze UI error',exc_info=(error_type,value,traceback))
-        app.game.pause()
-        app.connection_status.set('An app error occurred; see micromaze-errors.log.')
-    root.report_callback_exception = callback_error
-    app = MazeApp(root,capture_dir=args.capture_dir,device=args.device,
-                  connect=args.connect,preview=args.preview)
-    root.mainloop()
+    launch_game(MazeApp, description=__doc__)
 
 
 if __name__ == '__main__': main()

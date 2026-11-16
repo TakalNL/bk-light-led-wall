@@ -1,13 +1,13 @@
-# Private captures
+# Private session logs
 
-Save scans as JSON, notifications as streaming JSONL, and official-app HCI captures
-with experiment notes here. Raw data is ignored by Git; only this README and the
-blank CSV template are intended for source control. Store filenames with timestamps
-or experiment IDs; discovery tools refuse to overwrite existing files.
+New game summaries and supervised diagnostic captures are written here. Only
+this README and the blank CSV template are intended for Git. Games record
+connection/frame/error summaries; `--trace-packets` adds full transport events.
 
-Review identifiers and unrelated traffic before sharing. Full Android bugreports
-can contain personal data. Keep a private original and create a target-only extract.
-`listen` observes the PC's selected notification subscription; use phone HCI logging
-to observe the official app's writes. See [HARDWARE_TESTS.md](../HARDWARE_TESTS.md).
+Completed research runs, downloaded artwork and old logs have been compressed
+under ignored `archive/private/`, preserving original paths and file hashes.
+See [recovery instructions](../docs/development.md#private-archives).
 
-No real captures are supplied yet. Synthetic objects in tests are explicitly mocks.
+The shared panel preference lives in `.state/panel-settings.json`, independent
+of log retention. Legacy `snake-settings.json` is migrated on first use.
+Review device identifiers and unrelated traffic before sharing captures.
