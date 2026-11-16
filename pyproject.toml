@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "led-matrix-hacker"
+version = "0.1.0"
+description = "BLE discovery and supervised display experiments for a B.K. Light LED matrix"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "bleak>=1.1,<4",
+    "pypixelcolor @ git+https://github.com/lucagoc/pypixelcolor.git@c8cbaebca6df7797a7bcface8a1c4ca33e499973",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "Pillow>=11,<13"]
+rendering = ["Pillow>=11,<13"]
+experiments = ["Pillow>=11,<13", "tzdata>=2025.2"]
+game = ["Pillow>=11,<13", "tzdata>=2025.2"]
+
+[project.scripts]
+led-matrix = "led_matrix_hacker.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["led_matrix_hacker*", "games*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"*" = ["README.md", "*.cmd"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "games"]
+addopts = "-ra"

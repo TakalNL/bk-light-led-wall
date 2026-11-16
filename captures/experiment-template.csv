@@ -1,0 +1,1 @@
+experiment_id,action,timestamp_utc,capture_file,characteristic_uuid,att_handle,direction,payload_hex,packet_length,response_hex,observed_display,confidence,notes

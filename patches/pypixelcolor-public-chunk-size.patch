@@ -1,0 +1,311 @@
+diff --git a/docs/getting_started/library.md b/docs/getting_started/library.md
+index bf52d72..158a2f2 100644
+--- a/docs/getting_started/library.md
++++ b/docs/getting_started/library.md
+@@ -82,3 +82,25 @@ with Client(MAC_ADDRESS, write_with_response=False) as device:
+ ```
+ 
+ The CLI equivalent is `--fast`.
++
++### Configuring upload chunks
++
++Both clients accept `chunk_size=None` (the default) or an integer from 1 to 512.
++Leaving it unset preserves each command's chunk size, normally 244 bytes.
++For a device/backend verified to support larger acknowledged writes:
++
++```python
++async with AsyncClient(MAC_ADDRESS, chunk_size=500) as device:
++    await device.send_image("./image.png")
++```
++
++The synchronous equivalent is `Client(MAC_ADDRESS, chunk_size=500)`. This keeps
++write-with-response enabled; it does not enable fast/unacknowledged transport.
++Larger chunks can reduce acknowledged-write round trips for small images.
++Use the existing default for devices whose larger-write behavior is unverified.
++
++Bleak's API limits writes with response to 512 bytes; the device/backend must
++support the selected size.
++For `write_with_response=False`, an explicit chunk-size override is additionally
++capped at the connected characteristic's `max_write_without_response_size`.
++The setting changes command upload chunks, not connection or ACK timeouts.
+diff --git a/scripts/generate_client_stubs.py b/scripts/generate_client_stubs.py
+index f69e296..252c9af 100755
+--- a/scripts/generate_client_stubs.py
++++ b/scripts/generate_client_stubs.py
+@@ -225,7 +225,7 @@ from .lib.device_info import DeviceInfo
+ class AsyncClient:
+     """Asynchronous client for controlling the LED matrix via BLE."""
+     
+-    def __init__(self, address: str, *, write_with_response: bool = True) -> None: ...
++    def __init__(self, address: str, *, write_with_response: bool = True, chunk_size: Optional[int] = None) -> None: ...
+     
+     async def connect(self) -> DeviceInfo:
+         """Connect to the BLE device and retrieve device info."""
+@@ -266,7 +266,7 @@ class AsyncClient:
+     client_header = '''class Client:
+     """Synchronous client for controlling the LED matrix via BLE."""
+     
+-    def __init__(self, address: str, *, write_with_response: bool = True) -> None: ...
++    def __init__(self, address: str, *, write_with_response: bool = True, chunk_size: Optional[int] = None) -> None: ...
+     
+     def connect(self) -> DeviceInfo:
+         """Connect to the BLE device and retrieve device info."""
+diff --git a/src/pypixelcolor/client.py b/src/pypixelcolor/client.py
+index 72b0668..b29cadc 100644
+--- a/src/pypixelcolor/client.py
++++ b/src/pypixelcolor/client.py
+@@ -57,14 +57,17 @@ class AsyncClient:
+         """Scan for compatible LED devices asynchronously."""
+         return await scan_devices(timeout=timeout)
+     
+-    def __init__(self, address: str, *, write_with_response: bool = True):
++    def __init__(self, address: str, *, write_with_response: bool = True, chunk_size: Optional[int] = None):
+         """Initialize the AsyncClient.
+         
+         Args:
+             address: Bluetooth device address (e.g., "1D:6B:5E:B5:A5:54")
+             write_with_response: Write BLE chunks with response (default) or without, see send_plan().
++            chunk_size: Optional chunk-size override in 1..512 bytes. None preserves
++                each command's default (normally 244). Without-response writes
++                are also limited by the characteristic's advertised maximum.
+         """
+-        self._session = DeviceSession(address, write_with_response=write_with_response)
++        self._session = DeviceSession(address, write_with_response=write_with_response, chunk_size=chunk_size)
+         self._connected = False
+     
+     async def connect(self) -> DeviceInfo:
+@@ -143,16 +146,21 @@ class Client:
+         """Scan for compatible LED devices synchronously."""
+         return scan_devices_sync(timeout=timeout)
+     
+-    def __init__(self, address: str, *, write_with_response: bool = True):
++    def __init__(self, address: str, *, write_with_response: bool = True, chunk_size: Optional[int] = None):
+         """Initialize the Client.
+         
+         Args:
+             address: Bluetooth device address (e.g., "1D:6B:5E:B5:A5:54")
+             write_with_response: Write BLE chunks with response (default) or without, see send_plan().
++            chunk_size: Optional chunk-size override in 1..512 bytes. None preserves
++                each command's default (normally 244). Without-response writes
++                are also limited by the characteristic's advertised maximum.
+         """
+-        self._async_client = AsyncClient(address, write_with_response=write_with_response)
++        # Cleanup must be safe if constructor-option validation raises.
+         self._loop: Optional[asyncio.AbstractEventLoop] = None
+         self._loop_thread = None
++        self._async_client = None
++        self._async_client = AsyncClient(address, write_with_response=write_with_response, chunk_size=chunk_size)
+         self._setup_loop()
+     
+     def _setup_loop(self):
+diff --git a/src/pypixelcolor/client.pyi b/src/pypixelcolor/client.pyi
+index 5fdbb09..3f51d0d 100644
+--- a/src/pypixelcolor/client.pyi
++++ b/src/pypixelcolor/client.pyi
+@@ -11,7 +11,7 @@ from .lib.device_info import DeviceInfo
+ class AsyncClient:
+     """Asynchronous client for controlling the LED matrix via BLE."""
+     
+-    def __init__(self, address: str, *, write_with_response: bool = True) -> None: ...
++    def __init__(self, address: str, *, write_with_response: bool = True, chunk_size: Optional[int] = None) -> None: ...
+     
+     async def connect(self) -> DeviceInfo:
+         """Connect to the BLE device and retrieve device info."""
+@@ -94,7 +94,7 @@ class AsyncClient:
+ class Client:
+     """Synchronous client for controlling the LED matrix via BLE."""
+     
+-    def __init__(self, address: str, *, write_with_response: bool = True) -> None: ...
++    def __init__(self, address: str, *, write_with_response: bool = True, chunk_size: Optional[int] = None) -> None: ...
+     
+     def connect(self) -> DeviceInfo:
+         """Connect to the BLE device and retrieve device info."""
+diff --git a/src/pypixelcolor/lib/device_session.py b/src/pypixelcolor/lib/device_session.py
+index d18d870..a74620b 100644
+--- a/src/pypixelcolor/lib/device_session.py
++++ b/src/pypixelcolor/lib/device_session.py
+@@ -9,8 +9,9 @@ import inspect
+ import logging
+ from typing import Optional
+ from bleak import BleakClient
++from bleak.exc import BleakCharacteristicNotFoundError
+ 
+-from .constants import NOTIFY_UUID
++from .constants import NOTIFY_UUID, WRITE_UUID
+ from .device_info import DeviceInfo
+ from .transport.send_plan import send_plan
+ from .transport.ack_manager import AckManager
+@@ -37,16 +38,24 @@ class DeviceSession:
+             result = await session.execute_command("set_brightness", 50)
+     """
+     
+-    def __init__(self, address: str, *, write_with_response: bool = True):
++    def __init__(self, address: str, *, write_with_response: bool = True, chunk_size: Optional[int] = None):
+         """
+         Initialize a device session.
+         
+         Args:
+             address: Bluetooth device address (e.g., "1D:6B:5E:B5:A5:54")
+             write_with_response: Write BLE chunks with response (default) or without, see send_plan().
++            chunk_size: Optional command chunk-size override in 1..512 bytes.
++                None keeps each command's existing default. Without-response
++                writes are capped at the characteristic's advertised maximum.
+         """
++        if chunk_size is not None and (
++            isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or not 1 <= chunk_size <= 512
++        ):
++            raise ValueError("chunk_size must be None or an integer in 1..512")
+         self._address = address
+         self._write_with_response = write_with_response
++        self._chunk_size = chunk_size
+         self._client: Optional[BleakClient] = None
+         self._ack_mgr: Optional[AckManager] = None
+         self._device_info: Optional[DeviceInfo] = None
+@@ -235,6 +244,19 @@ class DeviceSession:
+         
+         # Build the SendPlan
+         plan = command_func(*args, **kwargs)
++
++        if self._chunk_size is not None:
++            # Bleak's API limit is 512 bytes for writes with response.
++            # Without-response writes have a per-characteristic limit.
++            limit = 512
++            if not self._write_with_response:
++                characteristic = self._client.services.get_characteristic(WRITE_UUID)
++                if characteristic is None:
++                    raise BleakCharacteristicNotFoundError(WRITE_UUID)
++                limit = characteristic.max_write_without_response_size
++                if limit < 1:
++                    raise ValueError("Invalid maximum write-without-response size")
++            plan.chunk_size = min(self._chunk_size, limit)
+         
+         # Execute the plan
+         return await send_plan(self._client, plan, self._ack_mgr,
+diff --git a/tests/test_client_chunk_size.py b/tests/test_client_chunk_size.py
+new file mode 100644
+index 0000000..dd0eef9
+--- /dev/null
++++ b/tests/test_client_chunk_size.py
+@@ -0,0 +1,122 @@
++"""Public chunk-size configuration with real builders/send loop and synthetic GATT."""
++
++import asyncio
++import atexit
++from io import BytesIO
++import random
++from types import SimpleNamespace
++
++from PIL import Image
++import pytest
++from bleak.exc import BleakCharacteristicNotFoundError
++
++from pypixelcolor import AsyncClient, Client
++from pypixelcolor.commands.send_image import send_image_hex
++from pypixelcolor.lib.device_session import DeviceSession
++from pypixelcolor.lib.transport.ack_manager import AckManager
++from pypixelcolor.lib.transport.send_plan import single_window_plan
++
++
++def image_bytes():
++    output = BytesIO()
++    Image.frombytes('RGB', (64, 16), random.Random(42).randbytes(64 * 16 * 3)).save(output, format='PNG')
++    return output.getvalue()
++
++
++class Gatt:
++    def __init__(self, ack, expected, maximum):
++        self.ack, self.expected = ack, expected
++        self.writes = []
++        self.characteristic = SimpleNamespace(max_write_without_response_size=maximum)
++        self.services = SimpleNamespace(get_characteristic=lambda _: self.characteristic)
++
++    async def write_gatt_char(self, _, data, *, response):
++        self.writes.append((bytes(data), response))
++        if sum(len(chunk) for chunk, _ in self.writes) == len(self.expected):
++            self.ack.window_event.set()
++            self.ack.all_event.set()
++
++    async def stop_notify(self, _):
++        pass
++
++    async def disconnect(self):
++        pass
++
++
++def connected(client, expected, maximum=244):
++    ack = AckManager()
++    raw = Gatt(ack, expected, maximum)
++    client._connected = True
++    client._session._connected = True
++    client._session._client = raw
++    client._session._ack_mgr = ack
++    return raw
++
++
++@pytest.mark.parametrize('chunk_size,response,maximum,expected_size', [
++    (None, True, 20, 244),
++    (500, True, 20, 500),
++    (512, True, 20, 512),
++    (500, False, 100, 100),
++    (500, False, 514, 500),
++    (20, False, 100, 20),
++])
++def test_public_async_image_upload_preserves_payload_and_respects_chunk_policy(chunk_size, response, maximum, expected_size):
++    png = image_bytes()
++    expected = send_image_hex(png.hex(), '.png').windows[0].data
++    client = AsyncClient('mock', write_with_response=response, chunk_size=chunk_size)
++    raw = connected(client, expected, maximum)
++    asyncio.run(client.send_image_hex(png.hex(), '.png'))
++    assert b''.join(chunk for chunk, _ in raw.writes) == expected
++    assert max(len(chunk) for chunk, _ in raw.writes) == expected_size
++    assert all(flag is response for _, flag in raw.writes)
++
++
++def test_public_sync_image_upload_uses_the_requested_chunk_size():
++    png = image_bytes()
++    expected = send_image_hex(png.hex(), '.png').windows[0].data
++    client = Client('mock', chunk_size=500)
++    try:
++        raw = connected(client._async_client, expected)
++        client.send_image_hex(png.hex(), '.png')
++        assert b''.join(chunk for chunk, _ in raw.writes) == expected
++        assert max(len(chunk) for chunk, _ in raw.writes) == 500
++        client.disconnect()
++    finally:
++        client._cleanup_on_exit()
++        client._loop_thread.join(timeout=1)
++        assert not client._loop_thread.is_alive()
++        client._loop.close()
++        atexit.unregister(client._cleanup_on_exit)
++
++
++@pytest.mark.parametrize('factory', [DeviceSession, AsyncClient, Client])
++@pytest.mark.parametrize('size', [0, -1, 513, True, 1.5, '500'])
++def test_invalid_chunk_size_is_rejected_by_public_constructors(factory, size):
++    with pytest.raises(ValueError, match='chunk_size'):
++        factory('mock', chunk_size=size)
++
++
++def test_unset_override_preserves_a_command_specific_chunk_size():
++    session = DeviceSession('mock')
++    session._connected = True
++    session._ack_mgr = AckManager()
++    expected = bytes(range(128))
++    raw = session._client = Gatt(session._ack_mgr, expected, 244)
++    asyncio.run(session.execute_command(lambda: single_window_plan('custom', expected, chunk_size=32)))
++    assert [len(chunk) for chunk, _ in raw.writes] == [32, 32, 32, 32]
++
++
++@pytest.mark.parametrize('maximum', [0, None])
++def test_unusable_without_response_characteristic_fails_before_writing(maximum):
++    client = AsyncClient('mock', write_with_response=False, chunk_size=500)
++    raw = connected(client, b'')
++    if maximum is None:
++        raw.characteristic = None
++        error = BleakCharacteristicNotFoundError
++    else:
++        raw.characteristic.max_write_without_response_size = maximum
++        error = ValueError
++    with pytest.raises(error):
++        asyncio.run(client.send_image_hex(image_bytes().hex(), '.png'))
++    assert raw.writes == []
