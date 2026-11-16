@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from games.common import panel, profiles
-from games.common.settings import load_or_migrate_panel_settings, load_panel_settings, save_panel_settings
+from games.common.settings import load_panel_settings, save_panel_settings
 from games.snake.game import Snake, board_png
 from led_matrix_hacker.windows_connection import connection_profile
 
@@ -230,29 +230,12 @@ def test_worker_disconnect_cancels_pending_upload_and_releases_hint(windows, mon
     assert released == [True]
 
 
-def test_legacy_settings_default_to_standard_and_new_choice_persists(tmp_path):
+def test_settings_default_to_standard_and_new_choice_persists(tmp_path):
     path = tmp_path/'settings.json'
     path.write_text('{"device":"mock"}', encoding='utf-8')
     assert load_panel_settings(path) == {'device': 'mock', 'stream_profile': 'standard'}
     save_panel_settings(path, device='mock', profile='windows-12fps')
     assert load_panel_settings(path) == {'device': 'mock', 'stream_profile': 'windows-12fps'}
-
-
-def test_settings_migrate_out_of_captures_once_and_preserve_new_preferences(tmp_path):
-    legacy = tmp_path/'captures'/'snake-settings.json'
-    new = tmp_path/'state'/'panel-settings.json'
-    save_panel_settings(legacy, device='mock', profile='windows-12fps')
-    original = legacy.read_bytes()
-    assert load_or_migrate_panel_settings(new, legacy)['device'] == 'mock'
-    assert new.is_file() and legacy.read_bytes() == original
-    save_panel_settings(new, device='other', profile='standard')
-    assert load_or_migrate_panel_settings(new, legacy) == {'device': 'other', 'stream_profile': 'standard'}
-
-
-def test_missing_legacy_settings_do_not_create_an_empty_state_file(tmp_path):
-    new = tmp_path/'state'/'panel-settings.json'
-    assert load_or_migrate_panel_settings(new, tmp_path/'missing') == {'device': '', 'stream_profile': 'standard'}
-    assert not new.exists()
 
 
 @pytest.mark.parametrize('saved', ['not json', '[]', '{"device":123,"stream_profile":[]}',

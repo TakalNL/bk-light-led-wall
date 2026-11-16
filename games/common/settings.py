@@ -25,11 +25,3 @@ def save_panel_settings(path, *, device, profile):
         raise ValueError('Unknown game streaming profile.')
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({'device': device, 'stream_profile': profile})+'\n', encoding='utf-8')
-
-
-def load_or_migrate_panel_settings(path, legacy_path):
-    """Import the old capture-local preference once without replacing new settings."""
-    if not path.exists() and legacy_path.is_file():
-        saved = load_panel_settings(legacy_path)
-        save_panel_settings(path, device=saved['device'], profile=saved['stream_profile'])
-    return load_panel_settings(path)

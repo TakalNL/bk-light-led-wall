@@ -51,8 +51,7 @@ These measurements depend on the tested host/panel. See [validation](docs/valida
 
 ## Settings and logs
 
-The games share `.state/panel-settings.json`; old `captures/snake-settings.json`
-settings migrate automatically on first use. Session summaries are written to
+The games share `.state/panel-settings.json`. Session summaries are written to
 `captures/`. Both locations are private and ignored by Git.
 
 Use `--trace-packets` only when a full diagnostic capture is needed. Developers

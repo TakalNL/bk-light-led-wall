@@ -56,7 +56,6 @@ throughout the session; the preference can also reduce concurrent BLE capacity.
 ## State and diagnostics
 
 `.state/panel-settings.json` holds the shared panel target and requested profile.
-Legacy capture-local settings migrate once and never overwrite newer settings.
 `recording.py` writes game connection/frame/error summaries by default. The
 `--trace-packets` option enables full transport events for diagnosis.
 

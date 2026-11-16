@@ -11,7 +11,7 @@ from PIL import Image, ImageTk
 
 from .panel import LatestBoard, PanelWorker
 from .profiles import STANDARD, available_profiles
-from .settings import load_or_migrate_panel_settings, save_panel_settings
+from .settings import load_panel_settings, save_panel_settings
 
 
 BACKGROUND = '#101820'
@@ -41,7 +41,7 @@ class GameApp:
         self.capture_dir = Path(capture_dir)
         self.capture_dir.mkdir(parents=True,exist_ok=True)
         self.settings = Path(settings_path) if settings_path is not None else Path('.state/panel-settings.json')
-        saved = load_or_migrate_panel_settings(self.settings,self.capture_dir/'snake-settings.json')
+        saved = load_panel_settings(self.settings)
         self.trace_packets = trace_packets
         if not device: device = saved['device']
         self.stream_profiles = available_profiles()

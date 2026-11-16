@@ -29,8 +29,7 @@ Developer tools are deliberately excluded from the installed application package
 ```
 
 All games share the launcher arguments. Default settings live in
-`.state/panel-settings.json`; the legacy capture-local preference is imported
-once if the new file is absent. `--settings` isolates a test preference. Normal
+`.state/panel-settings.json`. `--settings` isolates a test preference. Normal
 logs contain connection, frame and error summaries; `--trace-packets` adds full
 transport events. Identifiers/payloads in diagnostic captures remain private.
 

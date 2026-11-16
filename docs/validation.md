@@ -12,10 +12,11 @@ Protocol checks and owner visual observations are recorded separately.
 | Reopened real UI after discovery change | Ready in 1.562 s; owner accepted the result |
 | Public-client chunk-size comparison | 1,175/1,200 default versus 1,200/1,200 with 500-byte chunks |
 
-The cleaned source suite passes **246 tests**, with four optional upstream-branch
-cases skipped. This includes settings-migration and recording checks. Hidden
-desktop checks passed for all three games, including profile selection,
-migration, start/pause and disconnect. A 46,072-byte wheel also passed UI,
+The source suite passes **244 tests**, with four optional upstream-branch
+cases skipped. This includes settings and recording checks. Hidden desktop
+checks confirmed all three games load the shared settings directly. Earlier
+cleanup checks also covered profile selection, start/pause and disconnect.
+At that cleanup checkpoint, a 46,072-byte wheel passed UI,
 rendering and PNG-encoding checks from an independent environment outside the
 source directory; developer tools were absent from that installation. This is
 a packaging smoke check, not the still-outstanding clean-machine test.

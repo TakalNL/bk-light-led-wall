@@ -14,7 +14,7 @@
 - Kept experimental regressions under `tests/experiments/`; no tests were dropped.
 - Extracted shared game startup, bitmap fonts and recording utilities. Runtime
   game imports no longer depend on experimental modules.
-- Migrated panel preferences into ignored `.state/panel-settings.json`. Games
+- Moved our local panel preferences into ignored `.state/panel-settings.json`. Games
   now record summaries by default; full packet tracing is explicit.
 
 ## Local material
@@ -41,13 +41,17 @@ disk use, including the archives and preserved exceptions.
 ## Verification
 
 - Full suite after cleanup: **246 passed, 4 optional cases skipped**.
-- Source desktop checks: all three games passed migration, profile and controls.
+- Source desktop checks: all three games passed saved settings, profile and controls.
 - Installed-wheel checks outside the source directory: all three games opened,
   rendered and encoded RGB PNGs without the developer tools package.
 - Wheel contents exclude the moved experiment modules; build size 46,072 bytes.
 - Local Markdown links were checked; the unchanged original brief is exempt
   because its original references are historical.
-- Active interpreter/dependency imports and migrated settings were verified.
+- Active interpreter/dependency imports and saved settings were verified.
+
+The subsequent pre-release simplification removed automatic import of the old
+settings location and its two tests. Current verification: **244 passed, 4 skipped**;
+all three games load the shared settings directly, and local preferences are unchanged.
 
 No changes were published remotely, and no new panel streaming experiment was
 needed for this cleanup. Historical hardware measurements remain qualified by

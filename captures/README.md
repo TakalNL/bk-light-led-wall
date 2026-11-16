@@ -9,5 +9,5 @@ under ignored `archive/private/`, preserving original paths and file hashes.
 See [recovery instructions](../docs/development.md#private-archives).
 
 The shared panel preference lives in `.state/panel-settings.json`, independent
-of log retention. Legacy `snake-settings.json` is migrated on first use.
+of log retention.
 Review device identifiers and unrelated traffic before sharing captures.
