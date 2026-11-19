@@ -15,6 +15,31 @@ transfers are not automatically retried.
 The original bitmap font lives in `led_matrix_hacker/graphics.py`, independent
 of the retained animation experiments.
 
+## Combined display
+
+`led_matrix_hacker/wall.py` defines validated panel positions, clockwise mounting
+rotation, canvas splitting, immutable RGB frames and image/GIF fitting.
+`games/common/wall.py` owns multiple BLE links on one worker loop, verifies all
+panels before uploads and sends each canvas version concurrently. A completion
+barrier waits for every panel before selecting the latest unsent canvas. Any
+failure cancels sibling uploads and closes all links without retrying partial
+frames. Layout gaps are permitted; overlap and duplicate physical devices are
+rejected. The wall uses Standard pacing, targeting at most 10 combined frames/s.
+
+`games/wall/app.py` provides the Tk controller, preview, layout editor, discovery,
+identify/demo modes, media playback and Snake on the full canvas. Snake's grid
+dimensions default to the original 32×8 cells for existing launchers. The wall
+uses `.state/wall-settings.json`, separately from single-panel game settings.
+There is no verified hardware refresh synchronization across panels.
+
+The wall's bezel gap control adjusts uniform row/column spacing from 0 to 32
+pixels, including while connected. Each immutable canvas frame carries its own
+layout, so image pixels and compensation change together after the current
+multi-panel upload completes. Device identities/order remain fixed until
+disconnect. Hidden virtual rows/columns are omitted from uploads and blacked
+out in the preview. Positions persist the gap without changing the settings
+schema; custom layouts continue to use individual coordinates.
+
 ## Backend ownership
 
 The dependency is pinned to pypixelcolor commit

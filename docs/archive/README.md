@@ -14,6 +14,7 @@ The original source layout and full documents are recoverable from Git checkpoin
 | Public client and contribution | [Lifecycle](PUBLIC_CLIENT_TESTS.md), [streaming](STARFALL_STREAM_TESTS.md), [patch validation](UPSTREAM_PATCH.md), [unposted report draft](UPSTREAM_REPORT.md) |
 | Fast transport and negative probes | [Fast mode](FAST_MODE_TESTS.md), [grouped pixels](GROUPED_PIXELS_TESTS.md), [PNG pipeline](PNG_PIPELINE_TESTS.md) |
 | Windows tuning and integration | [Connection](WINDOWS_CONNECTION_TESTS.md), [timing](WINDOWS_TRANSPORT_PACING_TESTS.md), [app profiles/reconnect](GAME_STREAMING_PROFILE_TESTS.md) |
+| Resident playback and region commands | [Program and mixed-region observations](PROGRAM_REGIONS_TESTS.md) |
 
 Original capture filenames are retained inside ignored private archives, not
 committed as public data. Recovery is described in [development](../development.md#private-archives).

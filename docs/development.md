@@ -33,6 +33,13 @@ All games share the launcher arguments. Default settings live in
 logs contain connection, frame and error summaries; `--trace-packets` adds full
 transport events. Identifiers/payloads in diagnostic captures remain private.
 
+The separate [LED Wall controller](../games/wall/README.md) runs with
+`python -m games.wall.app --connect`; its layout is saved in
+`.state/wall-settings.json`. `--demo` starts the seam animation. Its CLI uses
+`--settings` and `--capture-dir` but does not use single-panel game profiles.
+`tools.diagnostics.wall_test --settings .state/wall-settings.json` exercises the
+combined upload path with identify/demo frames and bounded cleanup.
+
 ## Diagnostic toolkit
 
 Read-only discovery uses the CLI:

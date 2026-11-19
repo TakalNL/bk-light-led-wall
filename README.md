@@ -4,6 +4,11 @@ Three Windows desktop games for the B.K. Light panel sold by Action, article
 **3226274**. Tested hardware is **64x16**, device type `0x83`, using iPixel Color.
 The games run on the PC and send complete RGB images to the panel over Bluetooth.
 
+For multiple panels, use **[Start LED Wall.cmd](games/wall/Start%20LED%20Wall.cmd)**.
+The [LED Wall controller](games/wall/README.md) combines panels into a configurable
+canvas, including the tested stacked **64×32** setup. It supports positions,
+rotation, identify labels, whole-canvas Snake, image/GIF playback and a seam demo.
+
 | Game | Windows launcher | Controls and details |
 | --- | --- | --- |
 | Snake | [Start Snake.cmd](games/snake/Start%20Snake.cmd) | [Snake](games/snake/README.md) |
@@ -74,5 +79,5 @@ can override `--settings` and `--capture-dir`; see [development](docs/developmen
 supervised checks, and `tools/experiments/` retained research runners. Historical
 reports and the original brief are indexed in [docs/archive](docs/archive/README.md).
 
-This is a source prototype validated on one Windows host and panel. A standalone
+This is a source prototype validated on one Windows host and two panels. A standalone
 installer, clean-machine validation and broader device testing remain outstanding.

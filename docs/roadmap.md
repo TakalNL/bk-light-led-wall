@@ -13,10 +13,10 @@ The initial user is another buyer of this exact B.K. Light panel.
    on a clean host. Never retry ambiguous partial uploads automatically.
 5. Choose the application license and assemble dependency/asset notices before
    publishing a distributable release. Keep unlicensed downloaded test art out.
-6. Add ordinary PNG/GIF opening, preview and upload controls if the broader
-   content-player scope is retained; preserve fit choices, GIF timing and progress.
+6. Exercise LED Wall's image/GIF playback and layout controls on further hardware;
+   measure visible seam timing and recovery with two panels during gameplay.
 
-Brightness, hardware orientation, firmware updates and panel synchronization
+Brightness, hardware orientation commands, firmware updates and hardware refresh synchronization
 remain outside the validated release scope. The Windows profile remains opt-in;
 further transport experiments need reproducible evidence before integration.
 

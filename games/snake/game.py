@@ -19,15 +19,21 @@ class Board:
     food: tuple[int, int] | None
     phase: str
     score: int
+    width: int = WIDTH
+    height: int = HEIGHT
 
 
 class Snake:
-    def __init__(self, *, rng=None):
+    def __init__(self, *, rng=None, width=WIDTH, height=HEIGHT):
+        if type(width) is not int or type(height) is not int or width < 4 or height < 4:
+            raise ValueError('Snake needs an integer grid of at least 4x4 cells.')
+        self.width, self.height = width, height
         self.rng = rng or random.Random()
         self.restart()
 
     def restart(self):
-        self.body = [(8,4), (7,4), (6,4), (5,4)]
+        x, y = min(8, self.width-1), self.height//2
+        self.body = [(x-i,y) for i in range(4)]
         self.direction = 'right'
         self.turns = deque()
         self.phase = 'ready'
@@ -36,7 +42,7 @@ class Snake:
 
     def _food(self):
         occupied = set(self.body)
-        free = [(x,y) for y in range(HEIGHT) for x in range(WIDTH) if (x,y) not in occupied]
+        free = [(x,y) for y in range(self.height) for x in range(self.width) if (x,y) not in occupied]
         return self.rng.choice(free) if free else None
 
     def toggle_pause(self):
@@ -65,7 +71,7 @@ class Snake:
         head = (x+dx,y+dy)
         growing = head == self.food
         occupied = self.body if growing else self.body[:-1]
-        if not (0 <= head[0] < WIDTH and 0 <= head[1] < HEIGHT) or head in occupied:
+        if not (0 <= head[0] < self.width and 0 <= head[1] < self.height) or head in occupied:
             self.phase = 'over'
             self.turns.clear()
             return True
@@ -79,11 +85,11 @@ class Snake:
         return True
 
     def snapshot(self):
-        return Board(tuple(self.body),self.food,self.phase,self.score)
+        return Board(tuple(self.body),self.food,self.phase,self.score,self.width,self.height)
 
 
 def render_board(board):
-    image = Image.new('RGB',(64,16),'black')
+    image = Image.new('RGB',(board.width*2,board.height*2),'black')
     draw = ImageDraw.Draw(image)
     if board.food is not None:
         x,y = board.food
@@ -93,14 +99,16 @@ def render_board(board):
         if board.phase == 'over': color = (255,96,64) if index == 0 else (96,24,16)
         draw.rectangle((x*2,y*2,x*2+1,y*2+1),fill=color)
     if board.phase == 'paused':
-        draw.rectangle((29,5,30,10),fill=(255,192,0))
-        draw.rectangle((33,5,34,10),fill=(255,192,0))
+        cx, cy = image.width//2, image.height//2
+        draw.rectangle((cx-3,cy-3,cx-2,cy+2),fill=(255,192,0))
+        draw.rectangle((cx+1,cy-3,cx+2,cy+2),fill=(255,192,0))
     if board.phase in ('over','won'):
-        draw.rectangle((25,5,38,11),fill='black')
+        cx, cy = image.width//2, image.height//2
+        draw.rectangle((cx-7,cy-3,cx+6,cy+3),fill='black')
         for offset,letter in enumerate('END'):
-            for y,bits in enumerate(DIGITS[letter],6):
-                for x,bit in enumerate(bits,26+offset*4):
-                    if bit == '1': image.putpixel((x,y),(255,255,255))
+            for y,bits in enumerate(DIGITS[letter],cy-2):
+                for x,bit in enumerate(bits,cx-6+offset*4):
+                    if bit == '1' and 0 <= x < image.width: image.putpixel((x,y),(255,255,255))
     return image
 
 
