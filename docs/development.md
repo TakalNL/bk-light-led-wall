@@ -167,8 +167,10 @@ Test the extracted artifact from a separate directory without Python/Git on PATH
 Exercise discovery and real BLE output as well as browser/QR/game/media behavior;
 successful compilation alone is not hardware validation. The current ZIP is a
 local unsigned preview. The [MIT license](../LICENSE) is included alongside
-dependency notices. Public release and the remaining acceptance checks are
-pending. Building Windows does not validate Linux or ARM.
+dependency notices. The first checked artifact is available as a
+[Windows prerelease](https://github.com/TakalNL/bk-light-led-wall/releases/tag/v0.1.0-preview.1);
+broader acceptance checks remain pending. Building Windows does not validate
+Linux or ARM.
 
 ## Private archives
 

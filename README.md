@@ -32,7 +32,10 @@ intended image; it is not a readback of the LEDs.
 ## Try the Windows preview
 
 The standalone Windows x64 build includes Python, dependencies and the web UI.
-A local ZIP has been validated; a public download has not been published yet.
+**[Download the Windows preview ZIP](https://github.com/TakalNL/bk-light-led-wall/releases/download/v0.1.0-preview.1/LED-Wall-Windows-x64-0.1.0-preview.zip)**
+or read the [release notes and checksum](https://github.com/TakalNL/bk-light-led-wall/releases/tag/v0.1.0-preview.1).
+This is an unsigned prerelease; the tested setup and remaining limits are listed
+below and in the release notes. No Python, Git or Node installation is required.
 [Build instructions](docs/development.md#windows-standalone-preview) are available
 for contributors. Once you have the ZIP:
 

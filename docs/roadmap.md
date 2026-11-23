@@ -18,7 +18,11 @@ The project is MIT licensed. The pinned upstream is unmodified; no new upstream
 PR is required. Dated [validation](validation.md) preserves actual observations;
 the original internal planning documents remain in the maintainer's private archive.
 
-## Before publishing the Windows preview
+The [first Windows prerelease](https://github.com/TakalNL/bk-light-led-wall/releases/tag/v0.1.0-preview.1)
+provides the standalone ZIP and SHA-256 checksum. It is an experimental preview,
+not a claim that the broader acceptance checks below are complete.
+
+## Before a stable release or broader support claims
 
 - Explain and measure achieved output speed. Recent sessions show a repeatable
   top/bottom upload difference; compare the same workload on each panel, reverse
@@ -32,9 +36,9 @@ the original internal planning documents remain in the maintainer's private arch
   reconnection bounded and explicit; never retry ambiguous partial writes blindly.
 - Verify each advertised game/layout combination and visible timing alignment
   across fresh connections. More than two panels remains experimental.
-- Build the final ZIP with project/dependency notices, inspect its contents and
-  checksum, and publish it with a supported/tested matrix and known limits.
-  The local preview has not been published as a GitHub release.
+- Keep project/dependency notices, inspected artifacts and published checksums
+  with each release. Automating reproducible release builds remains future work;
+  the first prerelease uses the manually built and checked Windows artifact.
 
 Documentation and the research write-up can be shared with the preview limits
 stated. A broad "works immediately on any host" claim is not established.
