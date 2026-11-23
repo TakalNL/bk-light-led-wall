@@ -138,9 +138,11 @@ class LibraryLink:
 
 
 @asynccontextmanager
-async def library_connection(device, record, *, write_delay=0, chunk_size=244, windows_cached_services=True):
+async def library_connection(device, record, *, write_delay=0, chunk_size=244, windows_cached_services=None):
     if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or not 1 <= chunk_size <= 512:
         raise ValueError('GATT chunk limit must be an integer in 1..512.')
+    if windows_cached_services is None:
+        windows_cached_services = sys.platform == 'win32'
     if windows_cached_services and sys.platform != 'win32':
         raise ValueError('The Windows cache option is only available on Windows.')
     options = {'winrt_options': {'use_cached_services': True}, 'service_uuids': [SERVICE_UUID]} if windows_cached_services else {}
@@ -153,6 +155,9 @@ async def library_connection(device, record, *, write_delay=0, chunk_size=244, w
     record('scan_started', timeout_seconds=15)
     async with connection(device, scan_timeout=15, connect_timeout=30,
                           discovered_callback=discovered, **options) as (_, raw):
+        if getattr(raw.services, 'services', None) == {}:
+            raise ConnectionError('Bluetooth connected, but the host returned no display services. '
+                                  'Check Bluetooth service discovery on this host before reconnecting.')
         write = raw.services.get_characteristic(WRITE_UUID)
         notify = raw.services.get_characteristic(NOTIFY_UUID)
         if not raw.services.get_service(SERVICE_UUID) or write is None or 'write' not in write.properties:

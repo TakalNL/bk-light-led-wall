@@ -1,4 +1,4 @@
-"""MICROMAZE: an original, enemy-free 64x16 raycast maze."""
+"""MICROMAZE: an original, enemy-free raycast maze for panels and walls."""
 
 from dataclasses import dataclass
 from io import BytesIO
@@ -125,52 +125,63 @@ def cast_ray(x, y, dx, dy):
 WALLS = ((60,144,204),(196,112,64),(128,144,160))
 
 
-def render_view(view):
-    image = Image.new('RGB',(64,16),(12,16,28))
+def render_view(view, size=(64,16), *, message_box=None):
+    """Render one camera across the canvas, including hidden bezel pixels."""
+    width, screen_height = size
+    image = Image.new('RGB',size,(12,16,28))
     draw = ImageDraw.Draw(image)
-    draw.rectangle((0,8,63,15),fill=(28,24,24))
+    horizon = screen_height/2
+    draw.rectangle((0,int(horizon),width-1,screen_height-1),fill=(28,24,24))
     pixels = image.load()
     cosine,sine = math.cos(view.angle),math.sin(view.angle)
     depths = []
-    for column in range(64):
-        camera = (2*(column+.5)/64-1)*PLANE
+    # Preserve the original lens at 64x16. A wider wall reveals more of the
+    # scene; a taller wall adds vertical detail without stretching the image.
+    plane = PLANE*(width/screen_height)/4
+    for column in range(width):
+        camera = (2*(column+.5)/width-1)*plane
         hit = cast_ray(view.x,view.y,cosine-sine*camera,sine+cosine*camera)
         depths.append(hit.distance)
-        height = 16/hit.distance
-        top,bottom = 8-height/2,8+height/2
+        height = screen_height/hit.distance
+        top,bottom = horizon-height/2,horizon+height/2
         base = WALLS[min(2,max(0,hit.x)//5)]
         band = 1 if hit.distance < 2 else (.75 if hit.distance < 4 else .5)
         shade = band*(.7 if hit.side else 1)
         color = tuple(int(c*shade) for c in base)
         mortar = tuple(int(c*.65) for c in color)
-        for row in range(max(0,math.ceil(top)),min(16,math.ceil(bottom))):
+        for row in range(max(0,math.ceil(top)),min(screen_height,math.ceil(bottom))):
             v = (row+.5-top)/height
             # Two broad brick courses, with staggered vertical joints.
             joint = (hit.u+(.5 if v >= .5 else 0)) % 1 < .055
             pixels[column,row] = mortar if abs(v-.5) < .035 or joint else color
-    _draw_exit(image,view,depths)
+    _draw_exit(image,view,depths,plane)
     # A tiny, quiet centre mark helps maintain bearing while turning.
-    pixels[31,8] = (160,160,144)
+    pixels[max(0,width//2-1),screen_height//2] = (160,160,144)
     if view.phase == 'won':
-        draw.rectangle((11,3,52,12),fill=(0,28,12))
-        _text(draw,'EXIT',24,5,(96,255,144))
+        # Keep wall messages inside one physical panel, away from the seam.
+        left,top,right,bottom = message_box or (0,0,width,screen_height)
+        cx,cy = (left+right)//2,(top+bottom)//2
+        draw.rectangle((max(left,cx-21),max(top,cy-5),
+                        min(right-1,cx+20),min(bottom-1,cy+4)),fill=(0,28,12))
+        _text(draw,'EXIT',cx-8,cy-3,(96,255,144))
     return image
 
 
-def _draw_exit(image, view, depths):
+def _draw_exit(image, view, depths, plane):
+    screen_width,screen_height = image.size
     cosine,sine = math.cos(view.angle),math.sin(view.angle)
     dx,dy = EXIT[0]+.5-view.x,EXIT[1]+.5-view.y
     depth = dx*cosine+dy*sine
     if depth <= .05: return
     lateral = -dx*sine+dy*cosine
-    centre = 32+32*lateral/(PLANE*depth)
-    width,height = (32*.65/(PLANE*depth)),16/depth
-    left,top = centre-width/2,8-height/2
+    centre = screen_width/2+screen_width/2*lateral/(plane*depth)
+    width,height = (screen_width/2*.65/(plane*depth)),screen_height/depth
+    left,top = centre-width/2,screen_height/2-height/2
     pixels = image.load()
-    for x in range(max(0,math.ceil(left)),min(64,math.ceil(left+width))):
+    for x in range(max(0,math.ceil(left)),min(screen_width,math.ceil(left+width))):
         if depth >= depths[x]: continue
         u = (x+.5-left)/width
-        for y in range(max(0,math.ceil(top)),min(16,math.ceil(top+height))):
+        for y in range(max(0,math.ceil(top)),min(screen_height,math.ceil(top+height))):
             v = (y+.5-top)/height
             frame = u < .18 or u > .82 or v < .15
             pixels[x,y] = (64,255,112) if frame else (0,56,24)
@@ -192,9 +203,9 @@ def _text(draw, text, x, y, color):
         x += 4
 
 
-def view_png(view):
+def view_png(view, size=(64,16)):
     buffer = BytesIO()
-    render_view(view).save(buffer,format='PNG',optimize=True)
+    render_view(view,size).save(buffer,format='PNG',optimize=True)
     return buffer.getvalue()
 
 

@@ -7,7 +7,7 @@ import random
 
 from PIL import Image, ImageDraw
 
-from led_matrix_hacker.graphics import DIGITS
+from led_matrix_hacker.graphics import DIGITS, pixel_text
 
 WIDTH, HEIGHT = 32, 8
 DIRECTIONS = {'up': (0,-1), 'down': (0,1), 'left': (-1,0), 'right': (1,0)}
@@ -88,8 +88,17 @@ class Snake:
         return Board(tuple(self.body),self.food,self.phase,self.score,self.width,self.height)
 
 
-def render_board(board):
+def render_board(board, *, panel_boxes=()):
     image = Image.new('RGB',(board.width*2,board.height*2),'black')
+    if board.phase == 'over' and len(panel_boxes) == 2:
+        for box, word in zip(sorted(panel_boxes, key=lambda box: (box[1], box[0])), ('GAME', 'OVER')):
+            left, top, right, bottom = box
+            text = Image.new('RGB', (len(word)*4-1, 5), 'black')
+            pixel_text(text, word, 0, 0)
+            scale = min((right-left)//text.width, (bottom-top)//text.height)
+            text = text.resize((text.width*scale, text.height*scale), Image.Resampling.NEAREST)
+            image.paste(text, (left+(right-left-text.width)//2, top+(bottom-top-text.height)//2))
+        return image
     draw = ImageDraw.Draw(image)
     if board.food is not None:
         x,y = board.food

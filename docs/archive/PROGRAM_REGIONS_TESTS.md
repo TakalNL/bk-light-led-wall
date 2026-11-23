@@ -1,6 +1,6 @@
 # Resident playback and mixed-region investigation
 
-Date: 2026-11-19. Top panel only: `95:53:D1:21:30:2F`, type `0x83`,
+Dates: 2026-11-19 and follow-up 2026-11-22. Top panel only: `<TOP_BLE_ADDRESS>`, type `0x83`,
 64x16, MCU/Bluetooth version reply `080005800e020704`. These are bounded
 observations, not a firmware dump or an exhaustive command survey.
 
@@ -85,3 +85,121 @@ methods with instruction offsets, including:
 The research helper has a `--prepare-only` option for regenerating and checking
 the region fixture without connecting to Bluetooth. No production application
 transport or playback behavior was changed in this investigation.
+
+## Cached A/B follow-up, 22 November 2026
+
+The next bounded experiment follows the app's actual custom-remote upload chain:
+`BusinessControlModel.sendGifData` calls `SendCore.sendChannelGifData`, whose
+default mask makes `sendDataInner` use the normal saving path rather than the
+`0x65` preview override. `payloadChannel` takes the supplied serial byte for
+the business activity. For a single-window GIF, the reconstructed message
+matches pinned upstream `send_image(..., save_slot=serial)` byte for byte.
+
+`.research/cached_switch_observation.py` prepares original two-frame 64x16 GIFs
+with 600-ms frame durations and infinite looping. A has a cyan left bar and
+large A0/A1 label; B has a magenta right bar and B0/B1 label. Pillow decoding
+was checked against every source pixel and duration before upload.
+
+| Fixture | GIF bytes | SHA-256 |
+| --- | --- | --- |
+| A | 395 | `71a46be93a6763f0637839ea8d7debb085d7f17d6473f9e6470050a5223b312e` |
+| B | 385 | `ab7a453434e077d5a4b5fa1f7c7b1e9c957d3d7bf554c115f48f2e51937235c7` |
+
+The helper's writable targets are limited to the top panel, custom banks
+111/112, or ordinary slots 1/2. It uses acknowledged writes, strict normal GIF
+completion replies, held observation states and no clear/delete commands.
+Saving these fixtures replaces prior content in the addressed banks.
+
+### Custom banks 111/112
+
+Capture: `captures/cached-switch-observation-20261122T190608Z.jsonl`.
+Declaration `0800088002006f70` returned `0500088001`. Following the app's
+declaration/settle/upload order, A and B each returned `0500030003`; the owner
+separately confirmed correct A0/A1 and B0/B1 looping immediately after upload.
+
+| Follow-up from a neutral HOLD PNG | Packet / reply | Owner observation |
+| --- | --- | --- |
+| Business button 1 | `060007800100`; no application reply in two seconds | Scrolling preset text or default image, not A. |
+| Short A header retaining bank 111 | `0f000300008b010000d48f1445026f`; `0500030000` | HOLD remained. This differs from the earlier successful `0x65` restart reply. |
+| Program-list / upstream show-slot packet for 111 | `0700088001006f`; `0500088001` | HOLD remained. |
+
+These observations verify immediate rendering of custom-bank uploads, but not
+later retrieval or persistence of those banks. An intervening PNG changes the
+display state, so this sequence alone does not settle direct GIF-to-GIF recall
+or whether the earlier restart mechanism retains anything beyond its current
+GIF context.
+
+### Ordinary slots 1/2, with a neutral PNG
+
+Capture: `captures/cached-switch-observation-20261122T191121Z.jsonl`.
+The identical GIF payloads were sent to slots 1/2 after declaring
+`0800088002000102`. Both GIFs again returned strict completion. The sender
+then uploaded HOLD and sent `07000880010001`, independently checked against
+the installed upstream `show_slot(1)` builder. The panel replied `0500088001`,
+but the owner still saw HOLD. This is not evidence of successful saved-content
+selection. The helper subsequently sent exit-mode and disconnected.
+The owner then confirmed HOLD remained after that exit/disconnect sequence.
+
+### Direct GIF-to-GIF recall: verified
+
+The intervening PNG was removed from the experiment. In
+`captures/cached-switch-observation-20261122T191738Z.jsonl`, the helper declared
+ordinary slots 1/2 and uploaded the same A/B files, then sent only selection
+commands while native GIF playback was active. All three returned `0500088001`:
+
+| Action after initial A/B uploads | Application bytes | Owner observation |
+| --- | --- | --- |
+| Select slot 1 while B was playing | `07000880010001` | Cyan A0/A1. |
+| Select slot 2 | `07000880010002` | Magenta B0/B1; the owner was told no intermediate image had been sent. |
+| Select slot 1 again | `07000880010001` | Cyan A0/A1 again. |
+
+No PNG, GIF payload or short GIF header was sent between these selections.
+The three selections totaled 21 application bytes; this excludes BLE framing
+and replies. The earlier negative PNG-to-GIF results remain valid for those
+sequences, but do not establish inability to select stored content. The tested
+display context matters; its exact firmware state semantics remain unresolved.
+
+### Recall after reconnect: verified
+
+After the direct A/B/A session exited and disconnected, a new connection
+queried identity/version and sent `07000880010002`. It uploaded no media and
+did not redeclare or populate the slots. The reply was `0500088001`, and the
+owner confirmed magenta B0/B1. Capture:
+`captures/cached-switch-observation-20261122T192203Z.jsonl`. The final helper
+disconnected without an exit-mode command, leaving the selected native display
+in place. The file contains only three GATT writes: identity/time query,
+version query and the seven-byte selection command.
+
+This establishes at least two user-provided GIFs selectable without re-upload,
+including across a Bluetooth reconnect, on this top panel. This sequence did not
+establish two-file power-cycle retention (verified later below), maximum slot
+count, selection latency, behavior after arbitrary other modes, or the mapping
+of custom remote banks 111/112.
+The earlier single-file slot-1 power-cycle result is separate evidence.
+
+For games, cached selection can supply predetermined scenes, reactions or
+transitions using very little control traffic. It does not supply arbitrary
+live sprite positioning, region updates, or atomic multi-panel presentation.
+
+Private static methods, fixture hashes, raw captures and owner wording are
+retained under `.research/panel-capabilities/cached-switching/`. No production
+application behavior was changed for these experiments.
+
+### Two-file power-cycle retention: verified during the controls survey
+
+During the later 22 November native-controls test, the top was left in
+orientation1 / brightness10 and disconnected. With no phone-app interaction,
+the owner removed USB power for about five seconds, restored power, and reported:
+"Intro animation plays upside down, after that A01, upside down, after that
+switches to B0 upside down, then cycles back and forth between those two".
+No A/B payloads or selectors were sent during this observation. The controls
+survey uploaded only the temporary GO preview, without replacing saved slots.
+
+This establishes retention of both original ordinary-slot A/B GIFs through that
+power cycle and automatic playlist playback. Per-slot selection after power
+loss was not separately exercised. It does not establish larger storage
+capacity or custom-bank behavior. Capture:
+`captures/native-controls-observation-20261122T200518Z.jsonl`; verbatim owner
+reports: `.research/panel-capabilities/native-controls-owner-observations.json`.
+The [controls validation report](../validation.md#native-display-controls-follow-up-2026-11-22)
+records the surrounding commands and power-cycle conditions.

@@ -10,6 +10,9 @@ Use `--help` before a hardware write and keep its capture private.
 | `diagnostics/gif_animation.py` | Original numbered GIF upload check |
 | `diagnostics/corner_test.py`, `pixel_test.py` | Bounded coordinate checks |
 | `diagnostics/public_client_test.py` | Public AsyncClient lifecycle/upload check |
+| `diagnostics/wall_test.py` | Shared-canvas identify/demo and optional timing alignment |
+| `packaging/build_windows.py` | Standalone Windows ZIP from a clean wheel-installed environment |
+| `maintenance/archive_private.py` | Verified private archives with hashes; never deletes source files |
 | `experiments/public_game_stream.py` | Matched public-client/adapter replay |
 | `experiments/windows_connection_stream.py` | Connection preference, fast-write and timer comparisons |
 | `experiments/grouped_snake_stream.py` | Optional upstream PR #88 tests and concatenation probe |

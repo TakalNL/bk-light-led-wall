@@ -222,3 +222,39 @@ def test_invalid_chunk_size_is_rejected_before_discovery(size, ble):
     with pytest.raises(ValueError):
         asyncio.run(run())
     assert not ble.scan_calls
+
+
+@pytest.mark.parametrize('platform,cached', [('linux',False),('win32',True)])
+def test_default_cache_options_follow_platform(monkeypatch, platform, cached):
+    device = Device()
+    options = []
+    @asynccontextmanager
+    async def connect(_, **kwargs):
+        options.append(kwargs)
+        yield object(), device
+    monkeypatch.setattr(library_link, 'connection', connect)
+    monkeypatch.setattr(library_link.sys, 'platform', platform)
+    async def run():
+        async with library_link.library_connection('mock', lambda *a,**k:None):
+            pass
+    asyncio.run(run())
+    assert ('winrt_options' in options[0]) is cached
+
+
+def test_empty_os_service_discovery_is_not_misreported_as_an_unknown_panel(monkeypatch):
+    device = Device()
+    device.services = SimpleNamespace(services={})
+    closed = []
+    @asynccontextmanager
+    async def connect(_, **kwargs):
+        try:
+            yield object(),device
+        finally:
+            closed.append(True)
+    monkeypatch.setattr(library_link,'connection',connect)
+    async def run():
+        with pytest.raises(ConnectionError,match='host returned no display services'):
+            async with library_link.library_connection('mock',lambda *a,**k:None):
+                pytest.fail('Empty service discovery must not send device commands.')
+    asyncio.run(run())
+    assert closed == [True] and device.writes == []

@@ -1,4 +1,4 @@
-"""LED Wall: flexible multi-panel canvas, media player and full-canvas Snake."""
+"""LED Wall: multi-panel canvas, media player, Snake and Micromaze."""
 
 import argparse
 import asyncio
@@ -16,6 +16,7 @@ from PIL import Image, ImageTk
 
 from games.common.panel import LatestBoard
 from games.common.wall import WallWorker
+from games.micromaze.game import DT as MAZE_DT, Maze, render_view
 from games.snake.game import Snake, render_board
 from led_matrix_hacker.discovery import scan
 from led_matrix_hacker.wall import (
@@ -25,7 +26,8 @@ from led_matrix_hacker.wall import (
 
 class WallApp:
     def __init__(self, root, *, settings=Path('.state/wall-settings.json'),
-                 capture_dir=Path('captures'), connect=False, demo=False):
+                 capture_dir=Path('captures'), connect=False, demo=False, maze=False,
+                 align_timing=False):
         self.root, self.settings, self.capture_dir = root, settings, capture_dir
         capture_dir.mkdir(parents=True, exist_ok=True)
         self.events, self.mailbox = Queue(), LatestBoard()
@@ -35,6 +37,8 @@ class WallApp:
         self.mode, self.playing = 'Identify', False
         self.epoch = time.monotonic()
         self.snake, self.next_move = None, 0
+        self.maze = None
+        self.key_down = set()
         self.media_path, self.media_frames, self.media_deadlines = None, [], []
         self.last_frame = None
         self.status = tk.StringVar(value='Configure panels, then connect the wall.')
@@ -42,6 +46,10 @@ class WallApp:
         self.content = tk.StringVar(value='Identify panels')
         self.fit = tk.StringVar(value='Fit')
         self.gap = tk.StringVar(value='0')
+        self.align_timing = tk.BooleanVar(value=align_timing)
+        self.timing_alignment = threading.Event()
+        if align_timing:
+            self.timing_alignment.set()
         self.device = tk.StringVar()
         self.x, self.y, self.rotation = tk.StringVar(value='0'), tk.StringVar(value='0'), tk.StringVar(value='0')
         self.edit_controls = []
@@ -62,9 +70,12 @@ class WallApp:
         self._publish(identify_image(layout))
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.bind('<KeyPress>', self._key)
+        root.bind('<KeyRelease>', lambda event: self.key_down.discard(event.keysym.lower()))
         root.bind('<FocusOut>', lambda event: root.after(80, self._focus_lost))
         root.after(25, self._update)
-        if demo:
+        if maze:
+            self.set_mode('Micromaze')
+        elif demo:
             self.set_mode('Demo')
         if connect:
             root.after(300, self.connect)
@@ -123,12 +134,19 @@ class WallApp:
         self.gap_button = ttk.Button(compensation, text='Apply gap', command=self.apply_compensation)
         self.gap_button.pack(side='left', padx=8)
         ttk.Label(compensation, text='0 = off · adjustable during playback · hidden rows/columns').pack(side='left')
+        timing = ttk.Frame(outer)
+        timing.pack(fill='x', pady=(8, 0))
+        self.timing_toggle = ttk.Checkbutton(timing, text='Align panel timing (experimental)',
+                                           variable=self.align_timing, command=self._alignment_changed)
+        self.timing_toggle.pack(side='left')
+        ttk.Label(timing, text='Delays faster panels to reduce seam tearing · switch during play').pack(side='left', padx=8)
         playback = ttk.Frame(outer)
         playback.pack(fill='x', pady=(12, 6))
         self.connect_button = ttk.Button(playback, text='Connect wall', command=self.connect)
         self.connect_button.pack(side='left', padx=(0, 8))
         for text, action in (('Identify', lambda: self.set_mode('Identify')), ('Seam demo', lambda: self.set_mode('Demo')),
-                             ('Snake', lambda: self.set_mode('Snake')), ('Open image / GIF', self.open_media),
+                             ('Snake', lambda: self.set_mode('Snake')), ('Micromaze', lambda: self.set_mode('Micromaze')),
+                             ('Open image / GIF', self.open_media),
                              ('Pause / Play', self.toggle), ('Clear', lambda: self.set_mode('Clear'))):
             ttk.Button(playback, text=text, command=action).pack(side='left', padx=2)
         options = ttk.Frame(outer)
@@ -137,7 +155,8 @@ class WallApp:
         fit.pack(side='left')
         fit.bind('<<ComboboxSelected>>', lambda event: self._refit())
         ttk.Label(options, textvariable=self.content).pack(side='left', padx=12)
-        ttk.Label(outer, text='Snake: arrows / WASD · Space pauses · R restarts · click preview for keyboard control').pack(anchor='w')
+        ttk.Label(outer, text='Snake: arrows / WASD · Enter / Space starts or pauses · R resets · Esc pauses · click preview for control').pack(anchor='w')
+        ttk.Label(outer, text='Micromaze: W/S walk · A/D turn · Q/E strafe · Enter / Space pauses · R resets · Esc pauses').pack(anchor='w')
         ttk.Label(outer, textvariable=self.status, wraplength=820).pack(anchor='w', pady=(8, 3))
         ttk.Label(outer, textvariable=self.metrics).pack(anchor='w')
         root.minsize(920, 800)
@@ -146,6 +165,15 @@ class WallApp:
         button = ttk.Button(parent, text=text, command=action)
         button.pack(side='left', padx=2)
         self.edit_controls.append(button)
+
+    def _alignment_changed(self):
+        if self.align_timing.get():
+            self.timing_alignment.set()
+            self.status.set('Timing alignment on: learns upload durations from at least 3 frames. Compare the moving seam.')
+        else:
+            self.timing_alignment.clear()
+            self.status.set('Timing alignment off: both panels start uploading together from the next frame.')
+        self.canvas.focus_set()
 
     def _select(self):
         selected = self.table.selection()
@@ -182,7 +210,7 @@ class WallApp:
         if self.mode == 'Media':
             if not self._refit():
                 self.set_mode('Identify')
-        elif preserve_animation and self.mode == 'Demo':
+        elif preserve_animation and self.mode in ('Demo', 'Micromaze'):
             self._render()
         else:
             self.set_mode(self.mode)
@@ -288,7 +316,7 @@ class WallApp:
         if self.scanning:
             return
         if self._busy():
-            self.playing = False
+            self._pause_games()
             self.worker.close()
             self.connect_button.configure(state='disabled')
             self.status.set('Disconnecting all panels...')
@@ -306,12 +334,14 @@ class WallApp:
         self.last_error = ''
         self._lock(True)
         stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
-        self.worker = WallWorker(layout, self.mailbox, self.events, self.capture_dir/f'wall-ui-{stamp}.jsonl')
+        self.worker = WallWorker(layout, self.mailbox, self.events, self.capture_dir/f'wall-ui-{stamp}.jsonl',
+                                 timing_alignment=self.timing_alignment)
         self.connect_button.configure(text='Cancel connection')
         self.status.set('Finding the panels...')
         self.worker.start()
 
     def set_mode(self, mode):
+        self._pause_games()
         self.mode, self.epoch = mode, time.monotonic()
         self.playing = mode in ('Demo', 'Snake', 'Media')
         if mode == 'Snake':
@@ -323,6 +353,10 @@ class WallApp:
                 self.snake = Snake(width=self.layout.size[0]//2, height=self.layout.size[1]//2)
                 self.next_move = time.monotonic()+.15
                 self.playing = False
+        elif mode == 'Micromaze':
+            self.maze = Maze()
+            self.playing = False
+            self.next_move = time.monotonic()+MAZE_DT
         self._render()
         self.canvas.focus_set()
 
@@ -335,14 +369,23 @@ class WallApp:
         elif self.mode == 'Demo':
             image = demo_image(self.layout.size, int(elapsed*10))
         elif self.mode == 'Snake':
-            image = render_board(self.snake.snapshot())
+            image = render_board(self.snake.snapshot(), panel_boxes=tuple(tile.box for tile in self.layout.tiles))
+        elif self.mode == 'Micromaze':
+            top_panel = min(self.layout.tiles, key=lambda tile: (tile.y, tile.x))
+            image = render_view(self.maze.snapshot(), self.layout.size, message_box=top_panel.box)
         elif self.media_frames:
             index = bisect_right(self.media_deadlines, elapsed % self.media_deadlines[-1])
             image = self.media_frames[index]
         else:
             return
-        self.content.set(f'{self.layout.size[0]}×{self.layout.size[1]} · {self.mode}' +
-                         (f' · {self.snake.phase} · score {self.snake.score}' if self.mode == 'Snake' else ''))
+        detail = ''
+        if self.mode == 'Snake':
+            phase = {'ready': 'ready (Space / Enter to start)',
+                     'paused': 'paused (Space / Enter to resume)'}.get(self.snake.phase, self.snake.phase)
+            detail = f' · {phase} · score {self.snake.score}'
+        elif self.mode == 'Micromaze':
+            detail = f' · {self.maze.phase} · {self.maze.elapsed:.1f}s · find the green exit'
+        self.content.set(f'{self.layout.size[0]}×{self.layout.size[1]} · {self.mode}'+detail)
         self._publish(image)
 
     def _publish(self, image):
@@ -391,7 +434,15 @@ class WallApp:
         return True
 
     def toggle(self):
-        if self.mode == 'Snake':
+        if self.mode == 'Micromaze':
+            if self.maze.phase == 'won':
+                self.maze.restart()
+            self.maze.toggle_pause()
+            self.key_down.clear()
+            self.playing = self.maze.phase == 'running'
+            self.next_move = time.monotonic()+MAZE_DT
+            self._render()
+        elif self.mode == 'Snake':
             if self.snake.phase in ('over', 'won'):
                 self.snake.restart()
             self.snake.toggle_pause()
@@ -410,23 +461,70 @@ class WallApp:
         if event.widget.winfo_class() in ('TEntry', 'TCombobox', 'Entry', 'TSpinbox'):
             return
         key = event.keysym.lower()
-        if key == 'space':
-            self.toggle()
-            return 'break'
-        if self.mode != 'Snake':
+        if self.mode == 'Micromaze':
+            if key in ('up', 'down', 'left', 'right', 'w', 'a', 's', 'd', 'q', 'e'):
+                self.key_down.add(key)
+                return 'break'
+            if key in ('return', 'kp_enter', 'space', 'p', 'r', 'escape'):
+                if key in self.key_down:
+                    return 'break'
+                if key == 'r':
+                    self.set_mode('Micromaze')
+                elif key == 'escape':
+                    self._pause_games()
+                    self._render()
+                else:
+                    self.toggle()
+                self.key_down.add(key)
+                return 'break'
             return
-        if key == 'r':
-            self.set_mode('Snake')
+        if self.mode != 'Snake':
+            if key == 'space':
+                self.toggle()
+                return 'break'
+            return
+        if key in ('return', 'kp_enter', 'space', 'r', 'escape'):
+            if key in self.key_down:
+                return 'break'
+            if key == 'r':
+                self.set_mode('Snake')
+            elif key == 'escape':
+                self._pause_games()
+                self._render()
+            else:
+                self.toggle()
+            self.key_down.add(key)
             return 'break'
         direction = dict(w='up', a='left', s='down', d='right').get(key, key)
         if direction in ('up', 'down', 'left', 'right'):
             self.snake.turn(direction)
             return 'break'
 
-    def _focus_lost(self):
-        if not self.closing and self.mode == 'Snake' and self.root.focus_displayof() is None:
+    def _pause_games(self):
+        self.key_down.clear()
+        if self.snake:
             self.snake.pause()
-            self.playing = False
+        if self.maze:
+            self.maze.pause()
+        self.playing = False
+
+    def _advance_maze(self, now):
+        keys = self.key_down
+        self.maze.controls(int(bool(keys & {'up', 'w'}))-int(bool(keys & {'down', 's'})),
+                           int(bool(keys & {'right', 'd'}))-int(bool(keys & {'left', 'a'})),
+                           int('e' in keys)-int('q' in keys))
+        for _ in range(4):
+            if self.maze.phase != 'running' or now < self.next_move:
+                break
+            self.maze.tick()
+            self.next_move += MAZE_DT
+        if now-self.next_move > MAZE_DT*4:
+            self.next_move = now+MAZE_DT
+        self.playing = self.maze.phase == 'running'
+
+    def _focus_lost(self):
+        if not self.closing and self.mode in ('Snake', 'Micromaze') and self.root.focus_displayof() is None:
+            self._pause_games()
             self._render()
 
     def _update(self):
@@ -454,17 +552,18 @@ class WallApp:
                 self.connect_button.configure(text='Disconnect wall', state='normal')
             elif kind == 'frame':
                 timings = ' / '.join(f'{ms:.0f}' for ms in data['panel_reply_ms'])
-                self.metrics.set(f"{data['frames']} combined frames · wall reply {data['reply_ms']:.0f} ms · panel replies {timings} ms · skipped {data['superseded']}")
+                delays = ' / '.join(f'{ms:.0f}' for ms in data['panel_delay_ms'])
+                alignment = 'on' if data['timing_alignment'] else 'off'
+                self.metrics.set(f"{data['frames']} frames · wall reply {data['reply_ms']:.0f} ms · panel replies {timings} ms · "
+                                 f"reply gap {data['completion_skew_ms']:.0f} ms\n"
+                                 f"Timing alignment {alignment} · delays {delays} ms · skipped {data['superseded']}")
             elif kind == 'error':
                 self.last_error = data['message']
                 self.status.set('Wall stopped: '+self.last_error)
-                self.playing = False
-                if self.snake:
-                    self.snake.pause()
+                self._pause_games()
             elif kind == 'disconnected':
-                self.connected = self.playing = False
-                if self.snake:
-                    self.snake.pause()
+                self.connected = False
+                self._pause_games()
                 if not self.last_error:
                     self.status.set('Wall disconnected. Reconnect to resume output.')
                 self.connect_button.configure(text='Connect wall', state='normal')
@@ -474,7 +573,9 @@ class WallApp:
                 self.root.destroy()
                 return
         elif self.playing:
-            if self.mode == 'Snake' and time.monotonic() >= self.next_move:
+            if self.mode == 'Micromaze':
+                self._advance_maze(time.monotonic())
+            elif self.mode == 'Snake' and time.monotonic() >= self.next_move:
                 self.snake.tick()
                 self.next_move = time.monotonic()+.15
                 self.playing = self.snake.phase == 'running'
@@ -482,11 +583,13 @@ class WallApp:
         self.root.after(25, self._update)
 
     def close(self):
-        self.closing, self.playing = True, False
+        self.closing = True
+        self._pause_games()
         self._lock(True)
         self.connect_button.configure(state='disabled')
         self.gap_input.configure(state='disabled')
         self.gap_button.configure(state='disabled')
+        self.timing_toggle.configure(state='disabled')
         self.status.set('Closing all panel connections...')
         if self.worker:
             self.worker.close()
@@ -498,15 +601,18 @@ def main():
     parser.add_argument('--capture-dir', type=Path, default=Path('captures'))
     parser.add_argument('--connect', action='store_true')
     parser.add_argument('--demo', action='store_true')
+    parser.add_argument('--maze', action='store_true', help='Open Micromaze on the shared panel canvas.')
+    parser.add_argument('--align-timing', action='store_true', help='Experimentally align upload completion by delaying faster panels.')
     args = parser.parse_args()
     args.capture_dir.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=args.capture_dir/'wall-errors.log', level=logging.ERROR)
     root = tk.Tk()
-    app = WallApp(root, settings=args.settings, capture_dir=args.capture_dir, connect=args.connect, demo=args.demo)
+    app = WallApp(root, settings=args.settings, capture_dir=args.capture_dir, connect=args.connect,
+                  demo=args.demo, maze=args.maze, align_timing=args.align_timing)
 
     def callback_error(error_type, value, traceback):
         logging.error('Wall UI error', exc_info=(error_type, value, traceback))
-        app.playing = False
+        app._pause_games()
         app.status.set('An app error occurred; see wall-errors.log.')
 
     root.report_callback_exception = callback_error

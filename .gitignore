@@ -9,6 +9,10 @@ __pycache__/
 build/
 dist/
 .state/
+.env
+.env.*
+!.env.example
+*.btsnoop
 archive/private/
 captures/*
 !captures/README.md

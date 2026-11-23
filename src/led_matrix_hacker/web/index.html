@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101919">
+  <title>LED Wall</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><div><p class="eyebrow">YOUR PIXELS, TOGETHER</p><h1>LED Wall<span class="dot">.</span></h1></div><span id="connection" class="badge">Opening interface</span></header>
+    <section id="access" class="card" hidden>
+      <h2>Enter your access code</h2><p>Use the six digits shown on the computer running LED Wall, or scan its QR code.</p>
+      <form id="access-form"><label>Access code<input id="access-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" required></label><button>Open controller</button><p id="access-error" class="error" role="alert" hidden></p></form>
+    </section>
+    <div id="workspace" hidden>
+      <section class="card screen-card">
+        <div class="section-head"><div><p class="eyebrow">LIVE PREVIEW</p><h2 id="content-title">Your wall</h2></div><span id="dimensions" class="muted">64 × 16</span></div>
+        <div class="screen"><img id="preview" alt="Software preview of the wall’s intended image"></div>
+        <p id="progress" class="muted" role="status">Choose your panels to get started.</p>
+        <div class="toolbar"><button id="connect" class="primary">Connect panels</button><button id="disconnect" class="secondary">Disconnect all</button><button id="claim" class="secondary">Take control</button></div>
+        <p id="control-status" class="muted"></p><p id="error" class="error" role="alert" hidden></p>
+        <details id="phone-share"><summary>Use your phone</summary><p class="muted" id="phone-help">Connect your phone to the same Wi-Fi.</p><div id="phone-details" hidden><label>Address<select id="phone-address"></select></label><p>Access code: <strong id="phone-code"></strong></p><img id="phone-qr" alt="Scan to open this controller on your phone" width="200" height="200"><p><a id="phone-link" target="_blank" rel="noreferrer">Open controller</a></p></div></details>
+      </section>
+      <div class="columns">
+        <section class="card">
+          <div class="section-head"><h2>Make it move</h2><span class="step">01</span></div>
+          <div class="mode-grid" id="modes">
+            <button data-mode="identify"><strong>Identify</strong><small>Find each panel</small></button>
+            <button data-mode="demo"><strong>Seam demo</strong><small>A ring across the wall</small></button>
+            <button data-mode="snake"><strong>Snake</strong><small>Grow across your canvas</small></button>
+            <button data-mode="micromaze"><strong>Micromaze</strong><small>Find the green exit</small></button>
+            <button data-mode="starfall"><strong>Starfall</strong><small>Original 64 × 16, fitted</small></button>
+            <button data-mode="clear"><strong>Clear</strong><small>Send a black frame</small></button>
+          </div>
+          <div id="game-controls" hidden>
+            <div class="toolbar"><button id="play" class="primary">Play / Pause</button><button id="restart" class="secondary">Restart</button><span id="game-status" class="muted"></span></div>
+            <div class="controller" aria-label="Game controls">
+              <div class="dpad"><button data-key="up" class="up" aria-label="Up / move forward">↑</button><button data-key="left" class="left" aria-label="Left / turn left">←</button><button data-key="down" class="down" aria-label="Down / move backward">↓</button><button data-key="right" class="right" aria-label="Right / turn right">→</button></div>
+              <div class="extra-controls"><button data-key="fire" id="fire">FIRE</button><div class="toolbar"><button data-key="strafe_left" id="strafe-left" aria-label="Strafe left">Q</button><button data-key="strafe_right" id="strafe-right" aria-label="Strafe right">E</button></div></div>
+            </div>
+            <p class="muted">Arrows / WASD · Space starts or pauses · R restarts. Preview works without Bluetooth. Losing control pauses the game.</p>
+          </div>
+          <hr><h3>Your images &amp; GIFs</h3>
+          <label>Fit to canvas<select id="fit"><option>Fit</option><option>Fill</option><option>Stretch</option></select></label>
+          <label class="file-label">Choose a PNG or GIF<input id="media-file" type="file" accept="image/png,image/gif"></label>
+          <p id="media-status" class="muted">Up to 8 MB. GIFs stream while the host is running.</p>
+        </section>
+        <section class="card">
+          <div class="section-head"><h2>Set up your wall</h2><span class="step">02</span></div>
+          <p class="muted">Use one panel on its own, or add more to build a shared canvas. Power them on and close iPixel Color before scanning.</p>
+          <p id="panel-count" class="muted">No panels selected.</p>
+          <button id="scan" class="secondary">Find nearby panels</button>
+          <div id="devices" class="device-list"></div>
+          <div class="toolbar presets"><button id="stack" class="secondary">Stack vertically</button><button id="row" class="secondary">Side by side</button><button id="reverse" class="secondary">Reverse order</button></div>
+          <label>Gap between panels (pixels)<input id="gap" type="number" min="0" max="32" value="0"></label>
+          <div id="panels"></div>
+          <p class="muted">Each panel has its own connection controls. Disconnect keeps it in your layout; Remove forgets it. The remaining wall briefly reconnects and resizes. Games restart paused; media needs uploading again. A disconnected panel can keep its last image.</p>
+          <p id="empty-panels" class="muted">Scan, then add your panels. The first entry is the top or left panel.</p>
+          <button id="save" class="primary">Save layout</button>
+          <label class="check"><input id="alignment" type="checkbox"> Align panel timing</label>
+          <p class="muted">One- and two-panel Windows setups are tested. Larger walls are experimental: the editor accepts up to 16 panels within 512 × 512, but Bluetooth capacity is untested. Identify labels confirm order. Snake needs a rectangle with gap 0.</p>
+          <p id="timing" class="muted"></p>
+        </section>
+      </div>
+      <footer>Local Bluetooth · B.K. Light 64 × 16 · Two panels verified<br>Phone and host share a network. This preview shows intended pixels, not a readback of the LEDs.</footer>
+    </div>
+  </main>
+</body>
+</html>

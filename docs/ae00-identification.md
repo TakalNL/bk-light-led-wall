@@ -54,13 +54,16 @@ Restoring the existing wall controller afterward uses its normal initialization.
 
 ## Observed fields
 
+Owner-specific BLE/EDR addresses below are redacted in public documentation.
+The original identity/address comparisons remain in private captures.
+
 Each target-info response is 70 bytes, status 0, sequence 0. Both contain exactly
 the same TLV values except types 2 and 17, which contain addresses.
 
 | Field | Upper panel | Lower panel |
 | --- | --- | --- |
-| BLE address, TLV 17 | `95:53:D1:21:30:2F` | `DE:73:BB:98:C5:FD` |
-| EDR address field, TLV 2 | `95:53:D1:8E:71:38` | `DE:73:BB:31:16:A3` |
+| BLE address, TLV 17 | `<TOP_BLE_ADDRESS>` | `<BOTTOM_BLE_ADDRESS>` |
+| EDR address field, TLV 2 | `<TOP_EDR_ADDRESS>` | `<BOTTOM_EDR_ADDRESS>` |
 | RCSP protocol, TLV 0 | 2.0 | 2.0 |
 | SDK type, TLV 6 | 1 | 1 |
 | Update flags, TLV 8 | `01 00` | `01 00` |

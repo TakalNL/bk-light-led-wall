@@ -1,12 +1,14 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "led-matrix-hacker"
 version = "0.1.0"
-description = "Desktop games and BLE diagnostics for the B.K. Light LED matrix"
+description = "Local web control, multi-panel layouts and research for the B.K. Light LED matrix"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "bleak>=1.1,<4",
@@ -14,13 +16,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "Pillow>=11,<13"]
+dev = ["pytest>=8,<10", "Pillow>=11,<13", "aiohttp>=3.14.5,<4", "qrcode>=8,<9"]
+server = ["aiohttp>=3.14.5,<4", "Pillow>=11,<13", "tzdata>=2025.2", "qrcode>=8,<9"]
+bundle = ["pyinstaller==6.22.3", "pyinstaller-hooks-contrib==2026.10"]
 rendering = ["Pillow>=11,<13"]
 experiments = ["Pillow>=11,<13", "tzdata>=2025.2"]
 game = ["Pillow>=11,<13", "tzdata>=2025.2"]
 
 [project.scripts]
 led-matrix = "led_matrix_hacker.cli:main"
+led-wall = "led_matrix_hacker.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src", "."]
@@ -29,6 +34,7 @@ namespaces = false
 
 [tool.setuptools.package-data]
 "*" = ["README.md", "*.cmd"]
+"led_matrix_hacker" = ["web/*.html", "web/*.css", "web/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "games"]

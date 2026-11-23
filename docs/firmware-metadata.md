@@ -1,5 +1,10 @@
 # Firmware metadata lookup
 
+This report preserves dated requests and earlier investigation stages. Start
+with [findings](investigation-summary.md) for current conclusions. Reproduction
+commands referencing `.research/` require private artifacts/scripts that are
+not shipped with the application or public source.
+
 Date: 2026-11-19. Follow-up to [AE00 identification](ae00-identification.md).
 
 ## Result after inspecting the reference build

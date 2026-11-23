@@ -1,88 +1,115 @@
 # Architecture
 
-## Application
+## Local service and browser
 
-`games/common/app.py` owns the desktop preview, input lifecycle, pause/focus
-handling and connection UI. `launch.py` shares argument parsing, Tk setup and
-error handling. Each game's `app.py` supplies controls and status text, while
-`game.py` owns its simulation, rules and 64x16 RGB renderer.
+`src/led_matrix_hacker/service.py` owns saved setup, discovery, content, simulation
+and session lifecycle. `server.py` exposes an aiohttp API and persistent browser
+connection. Bundled HTML/CSS/JavaScript under `web/` needs no frontend build,
+external assets or graphical desktop. The service does not import Tk.
 
-`games/common/panel.py` runs one Bluetooth worker. A latest-state mailbox
-replaces unsent boards; it never queues a backlog. There is one image in flight.
-Unknown replies or disconnects stop the worker and pause the game. Partial
-transfers are not automatically retried.
+The Bluetooth host runs the application; desktop and phone browsers talk to it
+on the local network. Preview is software-rendered output, not LED readback.
+A per-start token protects the API and authenticates the browser connection.
+A six-digit code or QR gives a phone access without typing the long token.
+There is one active controller with explicit takeover; other browsers observe.
+Complete key sets, input release and a 1.5-second watchdog avoid stuck controls.
+Browser loss/backgrounding pauses games without requiring a BLE disconnect.
 
-The original bitmap font lives in `led_matrix_hacker/graphics.py`, independent
-of the retained animation experiments.
+Slow setup and media changes are serialized by an operation lock. A panel-card
+change joins the existing BLE worker before starting the remaining/new set of
+links. The configured mounting positions stay saved when a panel is excluded;
+the active canvas is translated to its bounding box. Games reset and media is
+cleared when changing the active set. Removing the last panel clears setup.
 
-## Combined display
+The service currently reconnects only on an explicit request. It does not
+persist uploaded media or implement unattended desired-state recovery. Native
+playback can change context after reconnect, so future recovery cannot assume
+the panel still shows the last temporary PNG.
 
-`led_matrix_hacker/wall.py` defines validated panel positions, clockwise mounting
-rotation, canvas splitting, immutable RGB frames and image/GIF fitting.
-`games/common/wall.py` owns multiple BLE links on one worker loop, verifies all
-panels before uploads and sends each canvas version concurrently. A completion
-barrier waits for every panel before selecting the latest unsent canvas. Any
-failure cancels sibling uploads and closes all links without retrying partial
-frames. Layout gaps are permitted; overlap and duplicate physical devices are
-rejected. The wall uses Standard pacing, targeting at most 10 combined frames/s.
+## Canvas and Bluetooth worker
 
-`games/wall/app.py` provides the Tk controller, preview, layout editor, discovery,
-identify/demo modes, media playback and Snake on the full canvas. Snake's grid
-dimensions default to the original 32×8 cells for existing launchers. The wall
-uses `.state/wall-settings.json`, separately from single-panel game settings.
-There is no verified hardware refresh synchronization across panels.
+`wall.py` defines validated tiles, mounting rotation, image/GIF fitting, canvas
+splitting and immutable RGB frames. Gap pixels are omitted from uploads and
+shown black in the preview. Overlaps and duplicate identifiers are rejected;
+the worker also checks that two identifiers do not resolve to the same device.
 
-The wall's bezel gap control adjusts uniform row/column spacing from 0 to 32
-pixels, including while connected. Each immutable canvas frame carries its own
-layout, so image pixels and compensation change together after the current
-multi-panel upload completes. Device identities/order remain fixed until
-disconnect. Hidden virtual rows/columns are omitted from uploads and blacked
-out in the preview. Positions persist the gap without changing the settings
-schema; custom layouts continue to use individual coordinates.
+`games/common/wall.py` owns one BLE loop/thread and a link per active panel.
+Panels are discovered and verified before streaming. A latest-frame mailbox
+replaces unsent frames instead of queuing a backlog. Each canvas is uploaded
+concurrently, with at most one pending image per link; a barrier waits for every
+completion reply before the next canvas. A failed/ambiguous transfer cancels
+sibling uploads and closes the links rather than retrying partial images.
 
-## Backend ownership
+The wall targets at most 10 combined updates/s; a slow upload limits the actual
+rate. Optional adaptive alignment delays faster panels using recent median
+upload durations, bounded to 250 ms. This improved the observed test pattern;
+it is not an atomic display swap or a shared hardware refresh clock.
+
+Frames carry their own layout. The older Tk wall can therefore change gap
+geometry after the in-flight canvas finishes. The web UI currently requires
+disconnection for manual position/gap edits. Both require a new worker when
+changing panel identities/order.
+
+## Backend responsibilities
 
 The dependency is pinned to pypixelcolor commit
-`c8cbaebca6df7797a7bcface8a1c4ca33e499973`.
+`c8cbaebca6df7797a7bcface8a1c4ca33e499973`; no application patch is required.
 
 | Responsibility | Owner |
 | --- | --- |
-| Command construction, PNG/GIF framing, CRCs, ACK manager and send loop | pypixelcolor |
-| BLE platform discovery, connection and GATT access | Bleak |
-| Connection bounds, service checks, strict image reply checks and tracing | `library_link.py` and `transport.py` |
-| Device information validation and verified-dimension guard | `protocol.py` |
-| Windows connection preference and its cleanup | `windows_connection.py` |
-| Game rules, rendering, controls, scheduling and preferences | This application |
+| Command builders, PNG/GIF framing, CRCs, ACK manager and send loop | pypixelcolor |
+| Platform discovery, connection and GATT access | Bleak |
+| Bounded connections, service checks, strict replies and tracing | `library_link.py`, `transport.py` |
+| Identity parsing and verified-dimension guard | `protocol.py` |
+| Optional scoped Windows connection hint | `windows_connection.py` |
+| Lifecycle, layout, coordination, original rendering and controls | This application |
 
-The app uses upstream builders and transport through an instrumented adapter,
-not the public Client connection lifecycle. The public AsyncClient has separate
-successful connection/upload tests. The public chunk-size proposal is
-[PR #90](https://github.com/lucagoc/pypixelcolor/pull/90); its patch is in [patches](../patches/README.md).
+The application uses upstream builders/transport through an instrumented adapter,
+not the public Client lifecycle. The public AsyncClient has separate hardware
+checks. The [chunk-size contribution](../patches/README.md) is independent;
+its submission does not imply a current upstream merge status.
 
-## Output profiles
+Normal uploads use acknowledged writes, RGB PNGs and non-saving slot 0, with
+chunks up to 500 bytes bounded by the connection's supported limits. Full raw
+RGB, indexed PNGs, fast writes and pipelining are not alternate production paths.
 
-Standard keeps the established minimum 100-ms interval between upload starts.
-The optional Windows profile requests throughput-optimized parameters and
-targets 12 uploads/second only after acceptance and a reported 15-ms interval
-with zero peripheral latency. Refusal, missing APIs or unmatched negotiation
-fall back to Standard; the UI shows that result and the requested choice is
-retained for the next connection.
+## Older desktop interfaces and Windows tuning
 
-Windows mode uses fixed deadlines to avoid accumulating sleep overshoot. It
-skips elapsed slots and sends the current board. Both profiles use acknowledged
-writes, chunks up to 500 bytes capped by MTU, complete RGB PNGs and slot 0.
-Fast writes and timer-resolution changes are experimental only.
+`games/common/app.py` and `launch.py` own the shared Tk shell, startup and input
+lifecycle. Game `game.py` modules contain rules and Pillow renderers. The original
+bitmap font lives in `graphics.py`. The web service reuses these renderers and
+game models without importing the desktop shell.
 
-The WinRT request uses a private Bleak backend object. It is held for the
-connection and released on normal exit, errors and cancellation. Reconnect
-acquires a fresh request. Initial parameters do not guarantee the interval
-throughout the session; the preference can also reduce concurrent BLE capacity.
+`games/common/panel.py` provides the original single-panel game worker. Its
+optional Windows profile requests throughput parameters and targets 12 uploads/s
+only after acceptance and reported 15-ms/zero-latency parameters. Missing APIs,
+refusal or unmatched negotiation fall back to Standard. The scoped WinRT request
+is released on exit/failure and reacquired on reconnect. It accesses a private
+Bleak backend object and may reduce concurrent Bluetooth capacity.
 
-## State and diagnostics
+**That optional profile is not applied by the web/wall worker.** Earlier measured
+single-panel 12-fps results do not describe the current wall. Timer-resolution
+changes and fast-write variants remain experiments.
 
-`.state/panel-settings.json` holds the shared panel target and requested profile.
-`recording.py` writes game connection/frame/error summaries by default. The
-`--trace-packets` option enables full transport events for diagnosis.
+## Storage, packaging and evidence
 
-Developer runners and their fixtures live under `tools/`; the installed games
-do not import them. Experimental regression tests live in `tests/experiments/`.
+| Entry point | Settings default |
+| --- | --- |
+| Windows standalone | `%LOCALAPPDATA%\LED Wall\wall-settings.json` |
+| Source web service | `.state/web-wall-settings.json` |
+| Older Tk wall | `.state/wall-settings.json` |
+| Older single-panel games | `.state/panel-settings.json` |
+
+The web service keeps timing/excluded-panel preferences in an adjacent
+`.preferences.json` file. Captures contain session/frame/error summaries;
+`--trace-packets` enables full transport details in tools that offer it.
+Settings, captures and access credentials are private and ignored by Git.
+
+`packaged.py` supplies standalone user-storage and browser defaults. The Windows
+build script consumes a wheel-installed environment, bundles runtime/assets,
+collects project/dependency notices and writes a ZIP plus checksum/build manifest.
+Building Windows does not validate Linux or ARM; real BlueZ playback is pending.
+
+Developer tools are under `tools/` and excluded from the application wheel.
+Historical reports retain their conditions under `docs/archive/`. Private APKs,
+research helpers, downloaded artwork and raw captures are not runtime dependencies.

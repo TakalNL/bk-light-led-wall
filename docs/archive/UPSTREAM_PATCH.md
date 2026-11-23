@@ -41,8 +41,8 @@ existing annotations rather than changing unrelated signatures.
 To apply to a separate clean checkout at the pinned commit:
 
 ```powershell
-git apply --check D:/repos/led-screen/patches/pypixelcolor-public-chunk-size.patch
-git apply D:/repos/led-screen/patches/pypixelcolor-public-chunk-size.patch
+git apply --check "/path/to/led-wall/patches/pypixelcolor-public-chunk-size.patch"
+git apply "/path/to/led-wall/patches/pypixelcolor-public-chunk-size.patch"
 ```
 
 To run the app's Starfall benchmark against this checkout without installing it:
@@ -126,14 +126,15 @@ validation round. Publication followed this validation round.
 
 ## Publication
 
-The published PR is open and ready for review. Its title, revised description,
+At the recorded submission checkpoint, the PR was open and ready for review.
+Its title, revised description,
 six-file list and head commit were verified against the approved local preview.
 The description explains the benchmark as small 64x16 PNG images from a scrolling
 game and includes the AI-assistance disclosure. Exact submission text is in
-[../../patches/PR_BODY.md](../../patches/PR_BODY.md); [upstream/PR_PREVIEW.json](upstream/PR_PREVIEW.json) records the approved
-file hashes, and [upstream/PR_PUBLISHED.json](upstream/PR_PUBLISHED.json) records the verified PR.
+[submitted description](../../patches/PR_BODY.md). The approved file hashes and
+publication JSON records are retained privately.
 
 GitHub's [Python application workflow](https://github.com/lucagoc/pypixelcolor/actions/runs/43885508470)
-is awaiting approval from an upstream maintainer. No CI jobs have run yet; this
-is an approval requirement, not a failed test result. The local validation above
-remains the available test evidence.
+was awaiting approval from an upstream maintainer at that checkpoint, with no
+CI jobs run. This was an approval requirement, not a failed test result.
+These are dated observations, not a claim about the PR's current status.

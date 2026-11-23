@@ -1,6 +1,11 @@
 # Panel capability map
 
-Date: 2026-11-19. Broad static survey of iPixel Color Android 3.7.9, combined
+For a concise overview, read [what we found](investigation-summary.md).
+This detailed map preserves dated evidence, unresolved leads and private capture
+references; it is not a complete firmware specification or a supported API.
+
+Initial survey: 2026-11-19; cached-selection and timing follow-ups: 2026-11-22.
+Broad static survey of iPixel Color Android 3.7.9, combined
 with existing observations on the owner's two panels. This is an inventory of
 the app-exposed surface and current evidence, not a complete firmware audit.
 The initial survey was static. A subsequent bounded top-panel experiment is
@@ -30,10 +35,10 @@ assigned to a particular panel. See [compatibility](compatibility.md),
 | Area | App-exposed functions and mechanism | Evidence on these panels |
 | --- | --- | --- |
 | Device identity | iPixel device-type/time exchange and hardware-version query | Verified type/grid and version byte pairs. The type query also writes the clock. |
-| Basic display | On/off, brightness, hardware orientation, exit current display mode | App commands. Hardware orientation is separate from our software rotation. Parameter ranges and persistence remain untested here. |
+| Basic display | On/off, brightness, hardware orientation, exit current display mode | Top-panel brightness10/50 and display off/on verified with native playback. Orientation0 restores upright; 1/2/3 each showed a 180-degree view. Orientation1 and apparent dim brightness survive reconnect and USB power loss. Soft display-off resets after power loss. Reconnect changed temporary GO preview to saved B0/B1. Full ranges remain unmeasured. See native-controls follow-up below. |
 | Still images | PNG upload, program/slot destination, host-rendered content | RGB PNG verified. A tested indexed PNG displayed black despite a successful upload reply. |
-| Local animation | GIF upload, multi-window transport, program/slot destination | Verified disconnected looping. A 4,096-frame / 1,915,364-byte GIF worked; this is a lower bound, not a capacity ceiling. Exact physical FPS remains unmeasured. |
-| Saved content | Persistent slot and startup playback, program-list uploads/deletion | One small slot-1 GIF survived one power cycle. `08 80` program-list declaration replied but left BASE visible. A six-byte business command triggered resident scrolling content; arbitrary cached-content selection remains unresolved. See resident-playback follow-up below. |
+| Local animation | GIF upload, multi-window transport, program/slot destination | Verified disconnected looping. A 4,096-frame / 1,915,364-byte GIF worked; this is a lower bound, not a capacity ceiling. Relative cadence tests support an effective minimum delay near 30 ms for the tested preview path; exact physical FPS remains unmeasured. See native cadence follow-up below. |
+| Saved content | Persistent slot and startup playback, program-list uploads/deletion | Two own GIFs in ordinary slots 1/2 were selected A/B/A with seven-byte commands and recalled after reconnect with no media upload. Both survived a USB power cycle and automatically played as a playlist. The same selector left a preceding PNG unchanged. Per-slot selection after power loss and custom-bank mapping remain unresolved. See resident-playback follow-up below. |
 | Pixel editing | Native DIY/pixel mode and coordinate/RGB updates | Static grouped drawing verified, including a full native two-square baseline. Mode 3 plus painting did not preserve the preceding PNG background. Fast animation remains limited by prior failures. |
 | Native image operations | DIY mode branches for erase, horizontal/vertical mirror and whole-image movement | Recovered builders tested on the top panel: no visible horizontal swap or rightward shift established. Vertical mirror and erase remain untested. See bounded DIY results below. |
 | Additional image path | `sendUnRedoImageData` uses internal data kind 6, sharing wire bytes `00 00` with kind 0 | App command; payload differences and codec/semantics remain unresolved. Do not infer hardware support from the method's name. |
@@ -98,7 +103,7 @@ Packet layouts and model-dependent branches must be checked before use.
 | `05 02` | `verifyPwd` | Credential verification; format branches exist. |
 | `03 80` | `deleteAllData`, `deleteAllData2` | Destructive clear; not tested here. |
 | `02 01` | `sendChannelDelIndex` | Delete program indexes; not tested here. |
-| `08 80` | Program-list declaration from channel/template UI | Tested list containing program 1 returned `0500088001` without a visible transition. App proceeds to media uploads after this reply. |
+| `08 80` | Program-list declaration and upstream `show_slot` selector | Ordinary slots 1/2 verified for direct GIF-to-GIF selection, including after reconnect. Reply `0500088001`. Earlier commands following a PNG left it unchanged; display context matters. |
 | `07 80` | Business-remote button and language selection | Six-byte button-1 command triggered resident scrolling content; custom bank mapping and distinct button selection remain unresolved. |
 
 Template/program metadata and firmware-transfer builders have additional
@@ -227,7 +232,7 @@ host timing values and explicitly marks physical timing as unmeasured.
 ## Bounded native-mode follow-up
 
 The script `.research/native_modes_probe.py` addresses only the top panel
-`95:53:D1:21:30:2F`. It uses a fixed allowlist and records every write and
+`<TOP_BLE_ADDRESS>`. It uses a fixed allowlist and records every write and
 notification in `captures/native-modes-top-20261119T155609Z.jsonl`.
 Initialization confirmed type `0x83` and version reply `080005800e020704` on
 that panel. Initialization also synchronized its time of day.
@@ -538,6 +543,35 @@ faster runs. No application transport change followed from this comparison.
 The controller was restored and resumed combined ring uploads in
 `captures/wall-ui-20261119-174629-484442.jsonl`.
 
+## Visible synchronization follow-up
+
+The [22 November visible synchronization comparison](validation.md#visible-synchronization-comparison-2026-11-22)
+used matching GO0-GO3 transitions on both panels. The owner saw the bottom lead
+under ordinary streaming, matching transitions after enabling timing alignment
+(including review of a 240-fps recording), and a bottom-panel lead again under
+native GIF playback after concurrent restart. No exact physical offset was
+measured. This establishes a visual benefit for aligned streaming in this test,
+while native restart remains approximate coordination. The following native
+cadence observations add relative-rate and qualitative drift evidence.
+
+## Native cadence and drift follow-up
+
+The [22 November cadence comparison](validation.md#native-cadence-and-drift-follow-up-2026-11-22)
+used identical 20-frame counters with different encoded delays. The owner saw
+50-ms frames run about twice as fast as 100-ms frames; a slow-motion count for
+20-ms versus 100-ms frames gave approximately 3.32 times the reference speed.
+In a direct 30-ms-top / 20-ms-bottom comparison, the owner confirmed matching
+pace over a continuous loop. This supports an effective delay floor near 30 ms
+on the tested path, without establishing an absolute 33-fps rate or universal
+ceiling. Individual-frame completeness and complex-media cadence are unmeasured.
+
+The preceding 700-ms loops retained about the same small visible lead when
+checked roughly nine minutes after restart, with no intervening playback writes.
+This is qualitative evidence against obvious growing drift over that interval;
+exact clock error and longer-term behavior remain unmeasured. The reports retain
+both captures and verbatim observations. The final native loops were left
+playing after both BLE connections were closed.
+
 ## Resident playback and mixed-region follow-up
 
 The [program/region report](archive/PROGRAM_REGIONS_TESTS.md) traces the program
@@ -546,9 +580,35 @@ serial allocation starting at 111, and the native template container. On the
 top panel, button 1 triggered scrolling text without an upload. Button 2 also
 triggered scrolling, but the owner did not confirm different content. Native
 text/image preview instead showed the default LED image. These findings do not
-yet establish arbitrary stored-animation switching or independent region updates.
+establish independent region updates. A 22 November follow-up verified selection
+of two own GIFs in ordinary slots 1/2, including after reconnect, when selecting
+from native GIF playback. The same selector left a preceding PNG unchanged.
+During the subsequent controls test, both GIFs survived USB power loss and
+automatically played as a playlist. Per-slot selection after power loss and
+custom remote-bank mapping remain unresolved.
 The report preserves exact packets, observation limits, candidate codec assignment
 and private capture references.
+
+## Native display controls follow-up
+
+The [controls validation report](validation.md#native-display-controls-follow-up-2026-11-22)
+records a top-only survey using the native GO0-GO3 preview. Brightness10/50
+alternated visibly while animation continued. Display-off blanked only the top;
+display-on brought the animation back without media upload or restart. Whether
+playback continues invisibly, pauses or restarts while blanked was not isolated.
+
+Orientation1, 2 and 3 each showed the same upside-down image in the tested
+sequences; orientation0 restored upright. These values are not four verified
+rotations. Orientation1 and apparent dim brightness persisted through an
+identity-only reconnect and an owner-performed USB power cycle. Soft display-off
+did not survive power loss: the intro and saved playlist returned.
+
+The reconnect sequence replaced temporary GO preview with saved B0/B1 despite
+sending only type/time and version queries. The triggering step is unresolved;
+do not infer preview retention from successful settings retention. Power loss
+also verified both saved A/B files and automatic playlist playback. Final
+cleanup set on / upright / brightness50 and disconnected; the owner confirmed
+the top upright, brighter and playing. Bottom-panel controls were not changed.
 
 ## Inventory artifacts and reproducibility
 

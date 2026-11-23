@@ -1,5 +1,11 @@
 # iPixel Color APK investigation
 
+This is a dated investigation report. The readable 3.7.9 follow-up enabled
+further analysis after the initial protected-build pass; use the current
+[findings](investigation-summary.md) and [capability map](panel-capabilities.md)
+for consolidated conclusions. Downloaded APKs and private extraction scripts
+are not included in the public repository.
+
 Date: 2026-11-19. Static inspection of the Android APK downloaded by the owner
 from the local-server option at `https://api.e-toys.cn/page/app/137`.
 

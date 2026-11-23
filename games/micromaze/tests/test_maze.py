@@ -112,14 +112,25 @@ def test_entire_maze_is_connected_and_can_be_won_by_movement_and_turning():
     assert game.snapshot() == won
 
 
-def test_exit_portal_is_depth_occluded_and_visible_when_in_sight():
-    hidden = render_view(View(1.5,1.5,0,'running',0))
-    visible = render_view(View(13.5,7.5,math.pi/2,'running',0))
-    assert (64,255,112) not in [color for _,color in hidden.getcolors(1024)]
-    assert (64,255,112) in [color for _,color in visible.getcolors(1024)]
+@pytest.mark.parametrize('size', [(64,16), (64,32), (128,16), (64,35), (16,128)])
+def test_exit_portal_is_depth_occluded_and_visible_when_in_sight(size):
+    hidden = render_view(View(1.5,1.5,0,'running',0),size)
+    visible = render_view(View(13.5,7.5,math.pi/2,'running',0),size)
+    assert (64,255,112) not in [color for _,color in hidden.getcolors(size[0]*size[1])]
+    assert (64,255,112) in [color for _,color in visible.getcolors(size[0]*size[1])]
     # A nearby wall at x=12 hides the portal even when looking toward it.
-    blocked = render_view(View(11.5,7.5,math.pi/4,'running',0))
-    assert (64,255,112) not in [color for _,color in blocked.getcolors(1024)]
+    blocked = render_view(View(11.5,7.5,math.pi/4,'running',0),size)
+    assert (64,255,112) not in [color for _,color in blocked.getcolors(size[0]*size[1])]
+
+
+@pytest.mark.parametrize('size', [(64,32), (128,16), (64,35)])
+def test_wall_renders_at_native_resolution_and_centres_completion_message(size):
+    view = View(1.5,1.5,0,'running',0)
+    image = Image.open(BytesIO(view_png(view,size)))
+    assert image.mode == 'RGB' and image.size == size
+    assert image.tobytes() != render_view(view).resize(size,Image.Resampling.NEAREST).tobytes()
+    won = render_view(replace(view,phase='won'),size)
+    assert won.getpixel((size[0]//2-8,size[1]//2-3)) == (96,255,144)
 
 
 def test_rgb_frames_fit_one_acknowledged_packet_throughout_the_maze():

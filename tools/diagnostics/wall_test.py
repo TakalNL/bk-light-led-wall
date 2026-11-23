@@ -5,6 +5,8 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
+from statistics import median
+import threading
 
 from games.common.panel import LatestBoard
 from games.common.wall import WallWorker
@@ -12,11 +14,14 @@ from led_matrix_hacker.recording import Recorder
 from led_matrix_hacker.wall import CanvasFrame, Layout, Tile, demo_image, identify_image, load_layout
 
 
-async def exercise(layout, output, *, seconds=10, fps=10):
+async def exercise(layout, output, *, seconds=10, fps=10, align_timing=False):
     mailbox, events = LatestBoard(), Queue()
     identify = CanvasFrame.from_image(identify_image(layout))
     mailbox.publish(identify)
-    worker = WallWorker(layout, mailbox, events, Path('unused'), fps=fps)
+    alignment = threading.Event()
+    if align_timing:
+        alignment.set()
+    worker = WallWorker(layout, mailbox, events, Path('unused'), fps=fps, timing_alignment=alignment)
     frames, start, final_version = [], None, None
 
     def emit(kind, **data):
@@ -55,6 +60,10 @@ async def exercise(layout, output, *, seconds=10, fps=10):
     if not frames:
         raise RuntimeError('No combined frames completed.')
     record('wall_test_finished', completed_frames=len(frames), visual_result='awaiting_owner_observation')
+    settled = frames[3:] or frames
+    print(f"Timing alignment {'on' if align_timing else 'off'}: median ACK gap "
+          f"{median(frame['completion_skew_ms'] for frame in settled):.1f} ms "
+          f"(not measured LED onset).")
     print(f"Both/all panels acknowledged {len(frames)} combined frames. "
           f"Last wall reply: {frames[-1]['reply_ms']:.1f} ms. Visual alignment needs owner confirmation.")
 
@@ -66,6 +75,7 @@ def main():
     parser.add_argument('--arrangement', choices=('stacked', 'horizontal'), default='stacked')
     parser.add_argument('--seconds', type=int, choices=range(1, 61), default=10)
     parser.add_argument('--fps', type=int, choices=range(1, 11), default=10)
+    parser.add_argument('--align-timing', action='store_true', help='Delay faster panels to target aligned completion replies.')
     args = parser.parse_args()
     if args.settings and args.devices:
         parser.error('Choose saved settings or device identifiers.')
@@ -82,7 +92,7 @@ def main():
     stem = 'wall-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     identify_image(layout).save(folder/(stem+'.png'))
     with (folder/(stem+'.jsonl')).open('x', encoding='utf-8') as output:
-        asyncio.run(exercise(layout, output, seconds=args.seconds, fps=args.fps))
+        asyncio.run(exercise(layout, output, seconds=args.seconds, fps=args.fps, align_timing=args.align_timing))
     print(f'Capture: {folder/(stem+".jsonl")}')
 
 

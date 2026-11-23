@@ -15,12 +15,12 @@ size. Keep the PR checkout while the contribution is being maintained.
 To check the patch against a separate clean checkout at the base commit:
 
 ```powershell
-git apply --check D:/repos/led-screen/patches/pypixelcolor-public-chunk-size.patch
+git apply --check "/path/to/led-wall/patches/pypixelcolor-public-chunk-size.patch"
 ```
 
 The patch had 68 passing upstream tests, package/stub/lint checks and a direct
 public-client hardware comparison. Full details are in the
 [archived validation](../docs/archive/UPSTREAM_PATCH.md) and
 [streaming report](../docs/archive/STARFALL_STREAM_TESTS.md).
-Completed preview/publication metadata and the posted PR #88 feedback are
-retained in [the upstream archive](../docs/archive/upstream/).
+The [posted PR #88 feedback](../docs/archive/upstream/PR88_COMMENT.md) is retained
+with its public link. Internal preview/publication JSON records remain private.

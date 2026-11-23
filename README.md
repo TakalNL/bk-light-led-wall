@@ -1,83 +1,121 @@
-# LED Matrix Hacker
+# LED Wall for the B.K. Light panel
 
-Three Windows desktop games for the B.K. Light panel sold by Action, article
-**3226274**. Tested hardware is **64x16**, device type `0x83`, using iPixel Color.
-The games run on the PC and send complete RGB images to the panel over Bluetooth.
+Control the **Action B.K. Light LED matrix, article 3226274**, from a local web
+interface. Use one panel or combine several into a shared canvas, upload images
+and GIFs, and control playback from a phone on the same network.
 
-For multiple panels, use **[Start LED Wall.cmd](games/wall/Start%20LED%20Wall.cmd)**.
-The [LED Wall controller](games/wall/README.md) combines panels into a configurable
-canvas, including the tested stacked **64×32** setup. It supports positions,
-rotation, identify labels, whole-canvas Snake, image/GIF playback and a seam demo.
+Tested hardware: **64x16, device type `0x83`, MCU 14.02 / Bluetooth 7.04**.
+Two physical panels have been tested on one Windows 11 host. This is an
+experimental Windows preview; Linux Bluetooth playback is not validated.
 
-| Game | Windows launcher | Controls and details |
-| --- | --- | --- |
-| Snake | [Start Snake.cmd](games/snake/Start%20Snake.cmd) | [Snake](games/snake/README.md) |
-| Starfall | [Start Starfall.cmd](games/starfall/Start%20Starfall.cmd) | [Starfall](games/starfall/README.md) |
-| Micromaze | [Start Micromaze.cmd](games/micromaze/Start%20Micromaze.cmd) | [Micromaze](games/micromaze/README.md) |
+**Interested in the investigation?** Start with
+[what we found](docs/investigation-summary.md): autonomous playback, multi-panel
+behavior, performance, persistence, and the limits of the advertised features.
 
-## Setup
+## What the controller does
 
-Requires CPython 3.11+ with Tk, Git, and Windows Bluetooth. From the project root:
+- Discover and identify panels without editing Bluetooth addresses in source.
+- Configure a shared canvas with positions, rotation, row/column presets and
+  variable bezel compensation. Hidden pixels behind the gap are not sent.
+- Connect, disconnect or remove individual panels. Save the arrangement and
+  which panels are enabled.
+- Fit PNG images and GIFs to the full canvas before splitting them across panels.
+- Stream a seam demo, with optional adaptive timing alignment across panels.
+- Use a bundled phone-friendly interface with a short access code or QR code.
+  One browser controls playback; other browsers can watch and take over.
+- Play the optional Snake, Micromaze and Starfall demos from a phone or keyboard.
+
+The host owns the Bluetooth connections and must stay running for web-controller
+playback. The phone talks to the host over the local network. Preview shows the
+intended image; it is not a readback of the LEDs.
+
+## Try the Windows preview
+
+The standalone Windows x64 build includes Python, dependencies and the web UI.
+A local ZIP has been validated; a public download has not been published yet.
+[Build instructions](docs/development.md#windows-standalone-preview) are available
+for contributors. Once you have the ZIP:
+
+1. Extract the entire folder and run `LED-Wall.exe`.
+2. Power on the panels, enable Bluetooth and close iPixel Color or other panel
+   controllers. Find nearby panels, add them, save the layout and connect.
+3. Use Identify to check their order, then choose a demo or upload a PNG/GIF.
+4. On a phone, open the host's displayed LAN address and enter its six-digit code,
+   or scan the QR under **Use your phone**. Allow the application through the
+   host firewall on your trusted private network if needed.
+
+Keep the console open while using the controller. Settings live under
+`%LOCALAPPDATA%\LED Wall`; uploaded media and game sessions are kept in memory.
+Changing the active panel set briefly reconnects the remaining wall, resets
+any game and clears uploaded media. Disconnecting stops updates; a panel can
+continue displaying its last image.
+
+## Run from source
+
+Requires Python 3.11+ and Git. Python 3.13.9 is the tested runtime. From the
+repository root on Windows:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e '.[dev,game]'
+.\.venv\Scripts\python.exe -m pip install -e ".[server]"
+.\.venv\Scripts\python.exe -m led_matrix_hacker.server --host 0.0.0.0 --open
 ```
 
-This checkout already has a working `.venv`. Double-click a launcher, enter the
-panel identifier or exact unique Bluetooth name, and connect. Close the phone
-app first; only one game can connect to the panel at a time. Choose **Play on
-PC only** for local play without Bluetooth.
+Alternatively, after installation, double-click
+[Start LED Wall Web.cmd](Start%20LED%20Wall%20Web.cmd).
+The pinned upstream dependency is installed automatically; no library patches
+or private research checkout are needed. Omit `--host 0.0.0.0` for access only
+from the host. Keep the access link/code private and use the service on a
+trusted local network; it is not intended to be exposed to the internet.
 
-```powershell
-.\.venv\Scripts\python.exe -m games.starfall.app --preview
-```
+Source-mode settings default to `.state/web-wall-settings.json`, separately
+from standalone and desktop settings. Use `--settings` and `--capture-dir` to
+choose other paths. Ubuntu/BlueZ investigation is documented in
+[compatibility](docs/compatibility.md); working Linux playback is not claimed.
 
-The pinned [pypixelcolor](https://github.com/lucagoc/pypixelcolor) dependency
-provides command framing, CRCs, chunks and acknowledgements. Our adapter adds
-bounded connections, verified dimensions, strict reply checks and logging.
+## Known limits
 
-## Panel updates
+- **10 fps is an output target, not a guaranteed rate.** Observed upload speeds
+  vary by panel and session; recent runs include roughly 4-5 updates/s on one
+  panel and a faster second panel. The difference is still under investigation.
+- Two panels are the hardware-tested baseline. The editor accepts up to 16
+  within 512x512; larger configurations and radio capacity are untested.
+- Timing alignment improved the observed two-panel test pattern. It does not
+  provide an atomic display swap or a shared hardware refresh clock.
+- GIFs in the web UI stream from the host. Autonomous native GIF upload and
+  saved-slot selection were verified separately but are not exposed in this UI.
+- Reconnection is explicit. Unattended service recovery, persistent media,
+  a stable automation API and Home Assistant/MQTT integrations are not included.
+- Snake needs a rectangular canvas with gap 0. Starfall fits its original 64x16
+  scene to the wall. The optional Windows 12-fps profile belongs to the older
+  single-panel desktop games; the web/wall worker does not use it.
+- Clean-machine acceptance, Android Chrome checks and broader hardware testing
+  remain outstanding. Phone control was confirmed in iPhone Safari; our lab
+  needed a temporary LAN relay because direct Windows inbound access was blocked.
 
-Choose a profile while disconnected:
+See [validation](docs/validation.md) for the actual measurements and conditions.
 
-- **Standard (10 fps)** is the default.
-- **Windows (12 fps)** requests a scoped throughput preference. It falls back
-  to Standard if unavailable, refused or not negotiated within five seconds.
+## Read further
 
-Both use acknowledged writes, one image in flight and the latest unsent game
-state. Game speed is independent of panel output. PNGs use non-saving slot 0;
-the saved startup GIF is preserved. A failed upload or connection pauses play;
-reconnect explicitly before resuming. The panel holds its last image when idle.
+| For | Start here |
+| --- | --- |
+| Buyers and curious owners | [Findings](docs/investigation-summary.md), [compatibility](docs/compatibility.md) |
+| Protocol and hardware investigation | [Capability map](docs/panel-capabilities.md), [research archive](docs/archive/README.md) |
+| Contributors | [Development](docs/development.md), [architecture](docs/architecture.md), [remaining work](docs/roadmap.md) |
+| Older desktop interfaces and games | [Wall controller](games/wall/README.md), [game guides](games/README.md) |
+| All documentation | [Documentation index](docs/README.md) |
 
-Saved-address discovery returns when the panel advertises. Two checks reached
-ready state in **1.56 and 2.91 seconds**, compared with about 16 seconds before.
-These measurements depend on the tested host/panel. See [validation](docs/validation.md).
+## Credits and license
 
-## Settings and logs
+[pypixelcolor](https://github.com/lucagoc/pypixelcolor) supplies the command
+builders, PNG/GIF framing, CRCs and acknowledgement transport.
+[Bleak](https://github.com/hbldh/bleak) supplies platform Bluetooth access.
+This repository adds the application lifecycle, layout, coordination, web
+interface, renderers and documented experiments. It uses a tested upstream
+revision; the [separate chunk-size contribution](patches/README.md) is not
+required to run it.
 
-The games share `.state/panel-settings.json`. Session summaries are written to
-`captures/`. Both locations are private and ignored by Git.
-
-Use `--trace-packets` only when a full diagnostic capture is needed. Developers
-can override `--settings` and `--capture-dir`; see [development](docs/development.md).
-
-## Development
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
-.\.venv\Scripts\python.exe -m led_matrix_hacker scan --timeout 15
-```
-
-- [Architecture](docs/architecture.md): runtime code, backend ownership and profiles.
-- [Compatibility](docs/compatibility.md): verified operations and limitations.
-- [Development](docs/development.md): tests, diagnostics, packaging and private archives.
-- [Validation](docs/validation.md): current evidence and historical reports.
-- [Roadmap](docs/roadmap.md): remaining work before a distributable release.
-
-`src/` contains the backend, `games/` the desktop games, `tools/diagnostics/`
-supervised checks, and `tools/experiments/` retained research runners. Historical
-reports and the original brief are indexed in [docs/archive](docs/archive/README.md).
-
-This is a source prototype validated on one Windows host and two panels. A standalone
-installer, clean-machine validation and broader device testing remain outstanding.
+Application code and original documentation/assets are [MIT licensed](LICENSE).
+Dependencies and separately attributed third-party material keep their own
+licenses. Standalone builds collect dependency notices. Downloaded APKs,
+vendor artwork, raw captures and local device settings are not distributed.

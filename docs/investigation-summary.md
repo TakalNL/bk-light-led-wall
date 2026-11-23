@@ -1,131 +1,99 @@
-# Investigation checkpoint: 19 November 2026
+# What we found
 
-Investigation stopped for the evening at the owner's request. This file collects
-the current conclusions and a starting point for the next session. Packet-level
-evidence and qualifications remain in the linked reports.
+These findings concern two **B.K. Light / Action article 3226274** panels,
+reporting **64x16, type `0x83`, MCU 14.02 / Bluetooth 7.04**. Hardware tests used
+one Windows host. They are observations of these units, not guarantees for
+other batches or every device supported by iPixel Color.
 
-## Working wall setup
+## The useful results
 
-Two 64x16 panels work as one PC-controlled canvas. Cyan panel 1 is physically
-above orange panel 2. With no compensation the canvas is 64x32; the current
-three-pixel bezel compensation puts the bottom panel at Y=19, making it 64x35.
-Hidden rows are omitted from uploads. Position, mounting rotation and the gap
-are adjustable; the saved layout remains local in `.state/wall-settings.json`.
+| Question | Observed answer | Practical consequence |
+| --- | --- | --- |
+| Can I control it without the vendor app? | Yes, through Python and the existing pypixelcolor protocol/library. | Our Windows web controller adds discovery, setup, media and phone access. |
+| Can two panels act as one screen? | Yes, with separate BLE links and a host-rendered shared canvas. | Position, mounting rotation and bezel compensation work; only two physical panels have been tested. |
+| Can it play without the host? | Native uploaded GIFs and a native clock continued after Bluetooth disconnected. | Autonomous playback exists, but the web controller currently streams its content and must stay running. |
+| Does saved content survive power loss? | Two original GIFs survived USB power loss and automatically played as a playlist. | Persistent native content is possible; total capacity and arbitrary slot behavior are not established. |
+| Can saved GIFs be selected without uploading again? | A/B/A switching in ordinary slots 1/2 worked with seven-byte commands, including recall after Bluetooth reconnect. | It worked from native GIF playback; the same selector did not replace a temporary HOLD PNG. Display mode matters. |
+| Can two native GIFs start together? | Concurrent short restart headers brought deliberately offset loops close together, with a small remaining visible lead. | Useful approximate coordination; no deferred upload/start or atomic synchronized swap was demonstrated. |
+| What improves streaming synchronization? | Delaying the faster upload using recent timings improved the observed GO-number transitions, including the owner's review of 240-fps video. | An optional software technique, not measured exact LED synchronization or a throughput increase. |
+| What does Double fun mode mean? | The packaging showed two panels and a plus sign. The tested iPhone picker switched between devices; the inspected Android model path excluded this product from dual-eye connections. | We did not establish a native paired-wall mode. That does not prove no alternative mode exists. |
 
-The [wall controller](../games/wall/README.md) provides identify labels, the ring
-seam demo, whole-canvas Snake, and image/GIF playback with Fit, Fill and Stretch.
-Snake currently requires a rectangular layout without gaps or compensation.
+## Streaming speed and native GIF speed are different questions
 
-Our controller adds layout and coordination on top of the pinned pypixelcolor
-command builders and transport. Each panel has its own BLE link. Both halves
-of a canvas are uploaded concurrently, then the sender waits for both PNG
-completion replies. It takes the latest available frame rather than building
-a queue of old game states. This is software coordination; it does not establish
-an atomic display swap or a shared refresh clock.
+The wall worker targets at most 10 combined image updates/s, sends panels
+concurrently and waits for all completion replies before selecting the latest
+canvas. It does not build a queue of old frames. A slow panel therefore limits
+the combined rate even when the other panel finishes earlier.
 
-Only two simultaneous physical panels have been verified. The editor's
-16-panel limit is software policy, not a measured Bluetooth capacity.
+Observed speed has varied. An earlier two-panel chunk-size comparison completed
+4.6-5.2 canvases/s. Recent individual sessions measured median upload/reply times
+near 224 ms for the top panel and 109 ms for the bottom, roughly 4-5 versus
+9-10 uploads/s during changing content. Both separately reported a 22.5-ms
+Windows connection interval and zero peripheral latency, so that interval alone
+does not explain the difference. Connection scheduling, image processing and
+reply timing remain candidates; an identical-workload comparison is still needed.
+The latest per-panel UI change did not introduce this observed asymmetry.
 
-## GIF playback and synchronization
+The older single-panel desktop Windows throughput profile previously reached
+about 12 acknowledged uploads/s on its tested workload. The web/wall worker
+does not currently apply that optional profile. Those earlier trials are not a
+promise of 12 fps for either current panel, a wall, or every image.
 
-There are two distinct playback paths:
+Native GIF playback is autonomous and is not limited by the wall streamer's
+10-fps target. Relative counter tests found no observed speed advantage for
+20-ms delays over 30-ms delays on the tested path, suggesting a delay floor
+near 30 ms. **An exact 33-fps physical rate was not measured.**
+All upload timings measure completion replies, not LED refresh or input latency.
 
-- The wall controller decodes a GIF on the PC, fits it to the virtual canvas,
-  splits each frame and streams RGB PNGs. The three-pixel gap can therefore be
-  included in the source geometry. The PC must keep running. The wall targets
-  at most 10 canvas updates/s and can skip superseded frames.
-- Native GIF uploads play autonomously on a panel after disconnecting. A
-  4,096-frame, 1,915,364-byte GIF played successfully; that is a tested lower
-  bound, not a capacity ceiling. One small slot-1 GIF survived one power cycle.
-  Physical playback FPS and general storage limits remain unmeasured.
+## Other verified behavior
 
-The APK revealed a 15-byte header that restarts a compatible, already uploaded
-GIF. Repeated headers prevented the diagnostic from reaching its later frames,
-confirming restart behavior. Sending one header to each panel concurrently
-brought deliberately offset GO0-GO3 loops into close visible alignment. The
-owner observed a small, steady bottom-panel lead. Uploads started playing before
-the header, so deferred start was not demonstrated. This native mechanism is
-not integrated into the wall controller. See the
-[capability map](panel-capabilities.md#newly-found-two-panel-path-and-its-limits).
+- A native clock kept time, with changing minutes, after Bluetooth disconnected.
+- A 4,096-frame, 1,915,364-byte GIF played successfully. This is a tested file,
+  not a measured storage ceiling.
+- Brightness changes and display off/on worked during native animation.
+- Hardware orientation 0 restored upright; values 1, 2 and 3 each appeared
+  upside down in the tested sequences. They are not four verified rotations.
+- Orientation and apparent brightness survived a USB power cycle. Software
+  display-off did not: the intro and saved playlist returned after power loss.
+- A completion reply did not guarantee correct visible output: indexed PNGs
+  appeared black and the tested JPEG path showed the boot image. RGB PNGs are
+  the verified live-image path.
 
-## Commands established, negative results and open questions
+## What remains unknown
 
-| Family | Current finding |
-| --- | --- |
-| RGB PNGs | Verified full-frame live output and the current game path. Indexed PNGs failed visually despite a completion reply. |
-| Native clock | Top panel showed green time, a blinking colon and an animated character. Minutes advanced after BLE disconnect. |
-| Native grouped drawing | Static same-color groups work, including a complete native two-square baseline. Earlier grouped animation did not beat PNG throughput. |
-| Resident playback | `060007800100` triggered scrolling text starting with "I'm in a hurry", followed by other text and the boot image, without uploading that media. Factory content versus earlier app installation is unresolved. |
-| Resident button selection | Button 2 also triggered scrolling, but the owner did not confirm different content. Arbitrary selection of our own cached animations remains unverified. |
-| Program list | `07000880010001` returned `0500088001` but left BASE visible. The app uses this command before uploading selected programs; a reply alone is not a playback-switch result. |
-| Native score/countdown/stopwatch | Tested sequences left TEST or showed the default image. Correct counters were not demonstrated. |
-| Preserve/overlay | Entering DIY mode 3 and painting a square did not preserve the preceding PNG background. The sequence did not isolate which step hid it. |
-| Mirror/movement | Tested horizontal mirror and right-movement commands produced no confirmed swap or shift, including on a fully native baseline. Other states/parameters remain open. |
-| JPEG frames | Recovered camera/game framing elicited a reply but displayed the boot image. Correct JPEG rendering is unverified. |
-| Mixed regions | The APK has a native container with separate text/image descriptors and coordinates. A candidate two-region preview showed the boot image. Image-kind assignment and entry requirements remain unresolved. |
+The exact controller chip, maximum storage/panel count, native paired-wall
+support and several generic-app commands remain unresolved. Tested scoreboard,
+timer, mirror, movement and mixed-region sequences did not establish correct
+visible behavior on this model. Those negative tests are not proof that every
+parameter or firmware lacks the feature.
 
-The business-remote code assigns custom content serials beginning at 111 before
-uploading it, but we have not established how those banks map to button commands
-on these panels. The native region path uploads a whole template; no independent
-resident-region replacement command was established. See the
-[program/region report](archive/PROGRAM_REGIONS_TESTS.md) and
-[full capability map](panel-capabilities.md).
+Authenticated AE00 queries identified JieLi RCSP 2.0, but returned no useful
+chip identifier or populated feature bitmap. Reconstructed firmware-metadata
+requests returned no matching data; no firmware image was obtained or flashed.
 
-## App, hardware identity and firmware research
+The tested Ubuntu/BlueZ configuration discovered the panels but had inconsistent
+service/attribute discovery, also seen with an independent tool. Playback on
+Linux is unvalidated; this is not a conclusion about all Linux adapters.
 
-Both panels report type `0x83`, MCU 14.02 and Bluetooth 7.04. Their advertising
-selector is customer `0007`, product `04`.
+## Software, evidence and credit
 
-The vendor's Android 3.8.0 APK has protected application code. The readable 3.7.9
-reference build has a matching extracted signing-certificate fingerprint and
-enabled the command survey. This is not independent full signature validation.
-Its active Android picker excludes `0007/04` from dual-eye connections. The
-owner separately observed the iPhone picker disconnecting one panel when the
-other is selected. The packaging's "Double fun mode" remains unexplained;
-neither the packaging nor these picker observations establish firmware pairing.
+The application uses [pypixelcolor](https://github.com/lucagoc/pypixelcolor) for
+command construction and transport. Our contribution is the application and
+multi-panel coordination, original renderers, Windows packaging and this
+exact-model investigation. The service is a preview, not a finished unattended
+home-automation integration or a replacement firmware.
 
-Authenticated queries on both AE00 services confirmed JieLi RCSP protocol 2.0.
-The identity replies are sparse, and feature-map replies contain no bitmap.
-The exact chip model and additional hardware interfaces remain unidentified.
-The actual firmware metadata request was recovered, but four bounded requests
-returned no matching data and no firmware image. This does not establish that
-14.02 is the latest available firmware. Details:
-[APK](apk-investigation.md), [AE00](ae00-identification.md),
-[firmware metadata](firmware-metadata.md).
+- [Compatibility](compatibility.md): tested hardware, supported paths and limits.
+- [Validation](validation.md): dated runs, measurements and owner observations.
+- [Capability map](panel-capabilities.md): command families and evidence levels.
+- [APK](apk-investigation.md), [AE00](ae00-identification.md),
+  [firmware metadata](firmware-metadata.md): deeper investigation.
+- [Research archive](archive/README.md): historical experiment reports.
+- [Investigation checkpoints](archive/INVESTIGATION_CHECKPOINTS.md): preserved
+  chronological notes, including conclusions later superseded by follow-ups.
 
-## Performance evidence and its limits
-
-A 244/500/500/244-byte chunk comparison sent the same 57 ring frames in each
-block over two open connections. All 228 canvases, or 456 panel uploads,
-completed successfully. Larger acknowledged chunks reduced the number of writes
-but did not establish a consistent speed improvement. The wall already requests
-500-byte chunks, and no transport change resulted from this comparison.
-
-This later run completed about 4.6-5.2 canvases/s. In the first three blocks,
-median upload completion was about 195 ms for the top and 80 ms for the bottom.
-Earlier runs were faster. We have not isolated a permanent panel difference:
-connection timing or scheduling established during a session remains plausible.
-These are host upload timings, not LED refresh, input-to-photon latency or a
-hardware FPS ceiling. The 10-fps wall target is likewise a software limit.
-See [validation](validation.md) for the different test conditions.
-
-## Resume point
-
-No further hardware investigation is scheduled tonight. The wall controller
-was restored and both panels resumed acknowledged ring-demo uploads.
-
-For the next session, the most useful unresolved capability question is whether
-our own preloaded animations can be selected by small commands. Trace the custom
-remote-bank mapping and content provenance before choosing a test fixture.
-For regions, resolve the image-kind assignment and exact model/entry path before
-interpreting another failed preview as lack of support. If interactive-game
-performance becomes the priority, compare reversed connection order, each panel
-alone and fresh connections before attributing the timing difference to hardware.
-
-Raw BLE captures, downloaded APKs, disassembly, research helpers, device settings
-and generated fixtures remain in the existing ignored local directories. Source
-and reports are versioned; the reports retain original private artifact paths.
-
-Evening checkpoint validation: the full source suite passed 288 tests, with four
-optional PR-branch cases skipped. These tests use synthetic BLE objects and did
-not restart hardware investigation.
+Public reports retain packet descriptions, fixture hashes and private capture
+references. Raw captures, owner-specific addresses, APKs and downloaded vendor
+artwork are not included. Some historical reproduction commands depend on
+private research scripts and are not runnable from a public clone; current
+supported tools are listed in [development](development.md#diagnostic-toolkit).

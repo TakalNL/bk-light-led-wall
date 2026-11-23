@@ -45,9 +45,19 @@ are not uploaded with normal content.
 
 - **Identify** sends numbered panel markers.
 - **Seam demo** animates a ring and line across the whole canvas.
-- **Snake** uses the full canvas with 2×2-pixel cells. Space starts/pauses;
-  arrows/WASD steer; R restarts. Click the preview for keyboard focus. Snake
+- **Snake** uses the full canvas with 2×2-pixel cells. Choose Snake, then press
+  Enter / Space or click **Pause / Play** to start or pause; arrows/WASD steer,
+  R resets, and Escape pauses. Click the preview for keyboard focus. Snake
   requires a rectangle with no gaps. Other game launchers still use 64×16.
+  On two panels, losing shows **GAME** on the top/left panel and **OVER** on
+  the bottom/right panel, with each word centred on its own screen.
+- **Micromaze** renders the first-person maze across the full canvas, including
+  bezel compensation and rotated panels. W/S or Up/Down walks, A/D or Left/Right
+  turns, and Q/E strafes. Enter / Space / P starts or pauses; Escape pauses and
+  R resets. Find the green exit; elapsed time and completion appear below the
+  preview. Movement runs at 20 Hz independently of the 10-fps wall output.
+  Losing focus or a connection pauses play and clears movement keys. Use
+  **Start Micromaze Wall.cmd** or `--maze` to open this mode directly.
 - **Open image / GIF** fits content to the whole canvas before splitting it.
   Fit preserves the whole image with black padding; Fill crops to cover the
   canvas; Stretch resizes to its dimensions. Transparency is composited on black.
@@ -67,6 +77,26 @@ PNGs and uploaded concurrently. The next canvas waits for every completion
 reply. Newer content replaces unsent frames instead of creating a backlog.
 Each panel has at most one upload pending. The wall uses Standard pacing with
 no Windows throughput hints.
+
+**Align panel timing (experimental)** is an optional way to reduce tearing at
+the seam during movement. It is off by default. Enable it while playing to
+compare: the controller measures each panel's upload duration, then starts
+faster panels later so their completion replies should arrive closer together.
+It needs at least three completed frames and uses the median of the latest
+seven uploads to avoid chasing isolated slow replies. Delays are capped at
+250 ms and apply to the same canvas version; the next version still waits for
+all panels. Switching it off restores simultaneous submissions on the next
+frame. Reconnecting starts with fresh measurements.
+
+The status area shows the applied delays and **reply gap**. These measure host
+completion timing, not when the LEDs actually change. Alignment may help when
+one link consistently finishes earlier, but it cannot guarantee a seamless
+display swap and may add some latency to the faster panel. If it looks worse,
+turn it off. To start with alignment enabled:
+
+```powershell
+.\.venv\Scripts\python.exe -m games.wall.app --maze --align-timing --connect
+```
 
 This coordinates software frames; the panels have no verified shared refresh
 clock or atomic multi-panel swap. A small visible timing difference at the seam
@@ -88,3 +118,6 @@ This sends identify labels for two seconds, runs the seam animation, restores
 the labels and disconnects. It creates a PNG preview and JSONL capture. Use it
 with the controller disconnected. Completion replies verify accepted uploads;
 visual alignment still needs an observer.
+Add `--align-timing` to compare the adjustment. Frame captures include each
+panel's upload duration, actual start/completion offsets, requested delay and
+completion gap. The diagnostic reports the median reply gap after warm-up.

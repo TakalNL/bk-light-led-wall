@@ -1,15 +1,38 @@
 """One connection per tile, one canvas version in flight across the wall."""
 
 import asyncio
+from collections import deque
 from contextlib import AsyncExitStack
+from statistics import median
 
 from led_matrix_hacker.wall import png_bytes
 
 from .panel import PanelWorker
 
 
+class PanelTiming:
+    """Estimate upload durations; ACK alignment is not a display-swap guarantee."""
+
+    def __init__(self, panels):
+        self.samples = [deque(maxlen=7) for _ in range(panels)]
+
+    def observe(self, durations):
+        for samples, duration in zip(self.samples, durations):
+            samples.append(duration)
+
+    def delays(self, enabled):
+        if not enabled or any(len(samples) < 3 for samples in self.samples):
+            return [0.0]*len(self.samples)
+        estimates = [median(samples) for samples in self.samples]
+        slowest = max(estimates)
+        # Never hold a frame indefinitely when a connection stalls. A median
+        # rejects isolated slow replies rather than delaying every other panel.
+        return [min(.250, max(0.0, slowest-estimate)) for estimate in estimates]
+
+
 async def stream_canvas(links, layout, mailbox, stop, emit, record, *, fps=10,
-                        device_infos=None, clock=None, sleep=asyncio.sleep):
+                        device_infos=None, clock=None, sleep=asyncio.sleep,
+                        timing_alignment=None):
     from pypixelcolor.commands.send_image import send_image_hex
     if type(fps) is not int or not 1 <= fps <= 10:
         raise ValueError('Wall output must target 1 to 10 fps.')
@@ -21,16 +44,22 @@ async def stream_canvas(links, layout, mailbox, stop, emit, record, *, fps=10,
     clock = clock or asyncio.get_running_loop().time
     version, frames, next_due, superseded = 0, 0, 0.0, 0
     current_layout = layout
+    timing = PanelTiming(len(links))
 
-    async def upload(index, link, plan):
-        started = clock()
+    async def upload(index, link, plan, delay, frame_started):
         try:
+            if delay:
+                await sleep(delay)
+            if stop.is_set():
+                raise asyncio.CancelledError
+            started = clock()
             _, _, replies = await link.send(plan, response=True, timeout=4)
             if replies[-1:] != [bytes.fromhex('0500020003')]:
                 raise ValueError('Missing expected image completion reply.')
         except Exception as error:
             raise ConnectionError(f'Panel {index+1}: {error}') from error
-        return (clock()-started)*1000
+        completed = clock()
+        return completed-started, started-frame_started, completed-frame_started
 
     while not stop.is_set():
         for index, link in enumerate(links):
@@ -55,32 +84,46 @@ async def stream_canvas(links, layout, mailbox, stop, emit, record, *, fps=10,
         images = frame_layout.split(frame.image())
         plans = [send_image_hex(png_bytes(image).hex(), '.png', save_slot=0, device_info=info)
                  for image, info in zip(images, device_infos)]
+        alignment_enabled = timing_alignment is not None and timing_alignment.is_set()
+        delays = timing.delays(alignment_enabled)
         started = clock()
         # Cancel and await siblings on any failed/ambiguous upload. No partial retries.
         try:
             async with asyncio.TaskGroup() as group:
-                tasks = [group.create_task(upload(i, link, plan))
+                tasks = [group.create_task(upload(i, link, plan, delays[i], started))
                          for i, (link, plan) in enumerate(zip(links, plans))]
         except ExceptionGroup as errors:
             raise errors.exceptions[0] from errors
+        if stop.is_set() and any(task.cancelled() for task in tasks):
+            break
         elapsed = (clock()-started)*1000
-        reply_ms = [task.result() for task in tasks]
+        results = [task.result() for task in tasks]
+        timing.observe([duration for duration, _, _ in results])
+        reply_ms = [duration*1000 for duration, _, _ in results]
+        completion_ms = [completion*1000 for _, _, completion in results]
         frames += 1
         version = latest
         next_due = started + 1/fps
         data = dict(frames=frames, version=version, reply_ms=round(elapsed, 3),
-                    panel_reply_ms=[round(ms, 3) for ms in reply_ms], superseded=superseded)
+                    panel_reply_ms=[round(ms, 3) for ms in reply_ms], superseded=superseded,
+                    timing_alignment=alignment_enabled,
+                    panel_delay_ms=[round(delay*1000, 3) for delay in delays],
+                    panel_start_ms=[round(start*1000, 3) for _, start, _ in results],
+                    panel_complete_ms=[round(ms, 3) for ms in completion_ms],
+                    completion_skew_ms=round(max(completion_ms)-min(completion_ms), 3))
         record('wall_frame', **data)
         emit('frame', **data)
 
 
 class WallWorker(PanelWorker):
-    def __init__(self, layout, mailbox, events, log_path, *, fps=10, trace_packets=False):
+    def __init__(self, layout, mailbox, events, log_path, *, fps=10, trace_packets=False,
+                 timing_alignment=None):
         if type(fps) is not int or not 1 <= fps <= 10:
             raise ValueError('Wall output must target 1 to 10 fps.')
         super().__init__(layout.tiles[0].device, mailbox, events, log_path,
                          encode=None, game_name='wall', trace_packets=trace_packets)
         self.layout, self.fps = layout, fps
+        self.timing_alignment = timing_alignment
 
     async def _session(self, record):
         from led_matrix_hacker.discovery import resolve_device
@@ -108,7 +151,8 @@ class WallWorker(PanelWorker):
             record('wall_ready', panels=len(links), dimensions=list(self.layout.size), fps=self.fps)
             self.emit('connected', panels=len(links), size=self.layout.size, fps=self.fps)
             await stream_canvas(links, self.layout, self.mailbox, self.stop,
-                                self.emit, record, fps=self.fps, device_infos=infos)
+                                self.emit, record, fps=self.fps, device_infos=infos,
+                                timing_alignment=self.timing_alignment)
 
     async def _run(self, record):
         task = asyncio.create_task(self._session(record))
