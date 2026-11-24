@@ -12,6 +12,16 @@ experimental Windows preview; Linux Bluetooth playback is not validated.
 [what we found](docs/investigation-summary.md): autonomous playback, multi-panel
 behavior, performance, persistence, and the limits of the advertised features.
 
+## Demo videos
+
+Recorded demos on the B.K. Light panels:
+
+- [Micromaze: first-person maze](https://youtu.be/AGMua4NuVSE)
+- [Snake](https://youtu.be/-CO68n5Ej7c)
+- [Generated GIF](https://youtu.be/RA9EkIxon28)
+- [Fire GIF](https://youtu.be/ZJzngTgopq0)
+- [Homer GIF](https://youtu.be/n5hoste20DE)
+
 ## What the controller does
 
 - Discover and identify panels without editing Bluetooth addresses in source.
@@ -20,14 +30,37 @@ behavior, performance, persistence, and the limits of the advertised features.
 - Connect, disconnect or remove individual panels. Save the arrangement and
   which panels are enabled.
 - Fit PNG images and GIFs to the full canvas before splitting them across panels.
+- Upload GIFs once for native playback on each panel, with coordinated starts.
 - Stream a seam demo, with optional adaptive timing alignment across panels.
 - Use a bundled phone-friendly interface with a short access code or QR code.
   One browser controls playback; other browsers can watch and take over.
 - Play the optional Snake, Micromaze and Starfall demos from a phone or keyboard.
 
-The host owns the Bluetooth connections and must stay running for web-controller
-playback. The phone talks to the host over the local network. Preview shows the
+The host owns the Bluetooth connections and must stay running for controls,
+games and live streaming. Uploaded native GIFs can continue after disconnection.
+The phone talks to the host over the local network. Preview shows the
 intended image; it is not a readback of the LEDs.
+
+## Images and GIF playback
+
+Choose a PNG or GIF in the web UI, or **Open image / GIF** in the desktop wall
+controller. **Fit** preserves the whole image with black padding, **Fill** crops
+to cover the canvas, and **Stretch** fills its dimensions. Pillow handles
+resizing, transparency and GIF encoding.
+
+Animated GIFs are automatically prepared from your saved layout: fit the full
+canvas, omit hidden bezel-gap pixels, crop each panel's portion and correct its
+mounting rotation. The controller uploads one native 64x16 GIF per panel, waits
+for all uploads to finish, then sends their restart commands together.
+
+Playback runs locally on the panels, bypassing the live stream's 10-fps target.
+The initial upload can take a minute or more depending on the animation and
+Bluetooth connection. Source frame timing is preserved; this does not add motion
+frames to a low-frame-rate GIF. Very short frame delays are sampled for the
+tested native decoder's approximate 30-ms floor while retaining loop duration.
+Panel starts remain approximately synchronized; a small offset or drift can remain.
+**Pause** freezes a preview frame; **Play** uploads and restarts the loop.
+See the [wall guide](games/wall/README.md#content) for playback and file limits.
 
 ## Try the Windows preview
 
@@ -36,6 +69,10 @@ The standalone Windows x64 build includes Python, dependencies and the web UI.
 or read the [release notes and checksum](https://github.com/TakalNL/bk-light-led-wall/releases/tag/v0.1.0-preview.1).
 This is an unsigned prerelease; the tested setup and remaining limits are listed
 below and in the release notes. No Python, Git or Node installation is required.
+
+The linked preview ZIP predates automatic native GIF preparation; use the current
+source below for that playback path.
+
 [Build instructions](docs/development.md#windows-standalone-preview) are available
 for contributors. Once you have the ZIP:
 
@@ -78,15 +115,17 @@ choose other paths. Ubuntu/BlueZ investigation is documented in
 
 ## Known limits
 
-- **10 fps is an output target, not a guaranteed rate.** Observed upload speeds
-  vary by panel and session; recent runs include roughly 4-5 updates/s on one
+- **10 fps is the live-streaming target, not a guaranteed rate.** It applies to
+  games and streamed demos; native GIF playback follows its own encoded timing.
+  Observed upload speeds vary by panel and session; recent runs include roughly
+  4-5 updates/s on one
   panel and a faster second panel. The difference is still under investigation.
 - Two panels are the hardware-tested baseline. The editor accepts up to 16
   within 512x512; larger configurations and radio capacity are untested.
 - Timing alignment improved the observed two-panel test pattern. It does not
   provide an atomic display swap or a shared hardware refresh clock.
-- GIFs in the web UI stream from the host. Autonomous native GIF upload and
-  saved-slot selection were verified separately but are not exposed in this UI.
+- Native GIF starts are approximately synchronized; the panels do not share a
+  verified playback clock. Saved-slot selection remains outside these interfaces.
 - Reconnection is explicit. Unattended service recovery, persistent media,
   a stable automation API and Home Assistant/MQTT integrations are not included.
 - Snake needs a rectangular canvas with gap 0. Starfall fits its original 64x16

@@ -122,7 +122,9 @@ function update(next) {
   $("scan").textContent = next.scanning ? "Looking for panels…" : "Find nearby panels";
   $("alignment").checked = next.timing_alignment;
   $("save").disabled = !own || next.connection !== "disconnected";
-  $("timing").textContent = next.stats.frames ? `${next.stats.frames} frames sent · reply gap ${Math.round(next.stats.completion_skew_ms)} ms` : "";
+  $("timing").textContent = next.stats.playback === "native"
+    ? `Native GIF · ${(next.stats.duration_ms / 1000).toFixed(2)}s loop · approximate sync`
+    : (next.stats.frames ? `${next.stats.frames} frames sent · reply gap ${Math.round(next.stats.completion_skew_ms)} ms` : "");
   if (next.error) showError(next.error);
   const signature = JSON.stringify(next.layout);
   if (!dirty && signature !== savedLayout) {
@@ -238,8 +240,11 @@ $("media-file").onchange = () => run(async () => {
   const file = $("media-file").files[0]; if (!file) return;
   if (file.size > 8*1024*1024) throw new Error("Choose a file smaller than 8 MB.");
   $("media-status").textContent = "Opening your media…";
-  await api(`media?fit=${encodeURIComponent($("fit").value)}`, file, true);
-  $("media-status").textContent = `${file.name} · host must remain running during playback`;
+  const uploaded = await api(`media?fit=${encodeURIComponent($("fit").value)}`, file, true);
+  update(uploaded);
+  $("media-status").textContent = uploaded.media_native
+    ? `${file.name} · plays on your panels · Play restarts the loop after pausing`
+    : file.name;
 });
 document.querySelectorAll("[data-key]").forEach(button => {
   button.addEventListener("pointerdown", event => {if(!own)return; event.preventDefault(); button.setPointerCapture(event.pointerId); pointers.set(event.pointerId,button.dataset.key); updateKeys();});

@@ -19,6 +19,7 @@ from games.common.wall import WallWorker
 from games.micromaze.game import DT as MAZE_DT, Maze, render_view
 from games.snake.game import Snake, render_board
 from led_matrix_hacker.discovery import scan
+from led_matrix_hacker.native_animation import NativePlayback, prepare_animation
 from led_matrix_hacker.wall import (
     CanvasFrame, Layout, Tile, demo_image, identify_image, load_layout, load_media, save_layout,
 )
@@ -40,6 +41,8 @@ class WallApp:
         self.maze = None
         self.key_down = set()
         self.media_path, self.media_frames, self.media_deadlines = None, [], []
+        self.media_animation = self.media_request = None
+        self.media_generation = 0
         self.last_frame = None
         self.status = tk.StringVar(value='Configure panels, then connect the wall.')
         self.metrics = tk.StringVar(value='No frames sent')
@@ -344,6 +347,8 @@ class WallApp:
         self._pause_games()
         self.mode, self.epoch = mode, time.monotonic()
         self.playing = mode in ('Demo', 'Snake', 'Media')
+        if mode == 'Media' and getattr(self, 'media_animation', None):
+            self._restart_media()
         if mode == 'Snake':
             # Holes have no physical pixels. A rectangular game needs full coverage.
             if sum(t.size[0]*t.size[1] for t in self.layout.tiles) != self.layout.size[0]*self.layout.size[1]:
@@ -392,8 +397,16 @@ class WallApp:
         frame = CanvasFrame.from_image(image, layout=self.layout)
         if frame != self.last_frame:
             self.last_frame = frame
-            self.mailbox.publish(frame)
             self._draw_preview()
+        request = (self.media_request if self.mode == 'Media' and self.playing
+                   and getattr(self, 'media_animation', None) else frame)
+        self.mailbox.publish(request)
+
+    def _restart_media(self):
+        self.media_generation += 1
+        self.media_request = NativePlayback(self.media_animation, self.media_generation)
+        self.epoch = time.monotonic()
+        self.paused_elapsed = 0
 
     def _draw_preview(self):
         if self.last_frame is None:
@@ -426,10 +439,12 @@ class WallApp:
             return False
         try:
             frames, deadlines = load_media(self.media_path, self.layout.size, self.fit.get())
+            animation = prepare_animation(frames, deadlines, self.layout) if len(frames) > 1 else None
         except (OSError, ValueError) as error:
             self.status.set(f'Could not load image: {error}')
             return False
         self.media_frames, self.media_deadlines = frames, deadlines
+        self.media_animation = animation
         self.set_mode('Media')
         return True
 
@@ -454,7 +469,10 @@ class WallApp:
                 self.paused_elapsed = time.monotonic()-self.epoch
             else:
                 self.epoch = time.monotonic()-getattr(self, 'paused_elapsed', 0)
+                if self.mode == 'Media' and self.media_animation:
+                    self._restart_media()
             self.playing = not self.playing
+            self._render()
         self.canvas.focus_set()
 
     def _key(self, event):
@@ -557,6 +575,13 @@ class WallApp:
                 self.metrics.set(f"{data['frames']} frames · wall reply {data['reply_ms']:.0f} ms · panel replies {timings} ms · "
                                  f"reply gap {data['completion_skew_ms']:.0f} ms\n"
                                  f"Timing alignment {alignment} · delays {delays} ms · skipped {data['superseded']}")
+            elif kind == 'native_playing':
+                if (self.mode == 'Media' and self.playing and self.media_request
+                        and data['generation'] == self.media_request.generation):
+                    self.epoch = time.monotonic()
+                    self.status.set('Animation playing on the panels · starts approximately synchronized')
+                    self.metrics.set(f"Native GIF · {data['frames']} frames · {data['duration_ms']/1000:.2f}s loop\n"
+                                     'Uploaded once per panel · Pause freezes a frame; Play restarts the loop')
             elif kind == 'error':
                 self.last_error = data['message']
                 self.status.set('Wall stopped: '+self.last_error)
@@ -602,6 +627,7 @@ def main():
     parser.add_argument('--connect', action='store_true')
     parser.add_argument('--demo', action='store_true')
     parser.add_argument('--maze', action='store_true', help='Open Micromaze on the shared panel canvas.')
+    parser.add_argument('--media', type=Path, help='Open an image or GIF fitted to the saved wall layout.')
     parser.add_argument('--align-timing', action='store_true', help='Experimentally align upload completion by delaying faster panels.')
     args = parser.parse_args()
     args.capture_dir.mkdir(parents=True, exist_ok=True)
@@ -609,6 +635,9 @@ def main():
     root = tk.Tk()
     app = WallApp(root, settings=args.settings, capture_dir=args.capture_dir, connect=args.connect,
                   demo=args.demo, maze=args.maze, align_timing=args.align_timing)
+    if args.media:
+        app.media_path = args.media
+        app._refit()
 
     def callback_error(error_type, value, traceback):
         logging.error('Wall UI error', exc_info=(error_type, value, traceback))

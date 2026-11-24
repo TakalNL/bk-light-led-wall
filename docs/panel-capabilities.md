@@ -220,7 +220,9 @@ app's connection-picker exclusion. This is **not** evidence of an atomic
 two-panel display swap, shared refresh clock, measured sub-frame alignment,
 long-term drift behavior or restart without a preceding compatible upload.
 No power-cycle persistence or storage-slot interpretation was tested for
-`0x65`. The normal wall controller has not been switched to this mechanism.
+`0x65`. The wall and web controllers now use this preview/restart mechanism for
+animated GIFs, preparing each panel's crop and mounting rotation automatically.
+See [architecture](architecture.md#canvas-and-bluetooth-worker) for the production path.
 
 After the owner confirmed the small, steady lead, the helper exited the test
 mode on both panels and finished normally. The ring controller was restored;

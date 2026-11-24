@@ -81,6 +81,59 @@ def test_browser_ownership_media_and_disconnect_pause(tmp_path):
     asyncio.run(run())
 
 
+def test_browser_gif_automatically_prepares_layout_and_native_playback(tmp_path):
+    from led_matrix_hacker.native_animation import NativePlayback
+    from led_matrix_hacker.wall import CanvasFrame
+
+    async def run():
+        service = WallService(tmp_path/'settings.json', tmp_path/'captures')
+        async with TestClient(TestServer(create_app(service, token=TOKEN))) as client:
+            ws, headers = await login(client)
+            layout = dict(version=1, panels=[dict(device='A', x=0, y=0, rotation=0),
+                                            dict(device='B', x=0, y=19, rotation=0)])
+            response = await client.post('/api/layout', json=layout, headers=headers)
+            assert response.status == 200
+            first = Image.new('RGB', (128, 70), 'red')
+            second = Image.new('RGB', (128, 70), 'blue')
+            media = BytesIO()
+            first.save(media, format='GIF', save_all=True, append_images=[second], duration=[40, 70], loop=0)
+            response = await client.post('/api/media?fit=Fill', data=media.getvalue(), headers=headers)
+            assert response.status == 200 and (await response.json())['media_native']
+            request = service.mailbox.read()[1]
+            assert isinstance(request, NativePlayback)
+            assert request.layout.size == (64, 35) and request.animation.duration_ms == 110
+            for data in request.animation.gifs:
+                with Image.open(BytesIO(data)) as gif:
+                    assert gif.size == (64, 16) and gif.n_frames == 2
+            # Preview animation must not replace the native request with PNGs.
+            service.media_elapsed = .05
+            service.render()
+            assert service.mailbox.read()[1] is request
+            service.game_action(service.owner, 'pause')
+            assert isinstance(service.mailbox.read()[1], CanvasFrame)
+            service.game_action(service.owner, 'toggle')
+            resumed = service.mailbox.read()[1]
+            assert isinstance(resumed, NativePlayback) and resumed.generation > request.generation
+            service.game_action(service.owner, 'restart')
+            assert service.mailbox.read()[1].generation > resumed.generation
+            # Late completion from an older upload cannot reset current playback.
+            service.media_elapsed = .05
+            service.events.put(('native_playing', dict(generation=request.generation)))
+            service._events()
+            assert service.media_elapsed == .05
+            service.events.put(('native_playing', dict(generation=service.media_request.generation,
+                                                      frames=2, duration_ms=110)))
+            service._events()
+            assert service.media_elapsed == 0 and service.stats['playback'] == 'native'
+            # A still image automatically returns to normal PNG output.
+            still = BytesIO(); first.save(still, format='PNG')
+            response = await client.post('/api/media', data=still.getvalue(), headers=headers)
+            assert response.status == 200 and not (await response.json())['media_native']
+            assert isinstance(service.mailbox.read()[1], CanvasFrame)
+            await ws.close()
+    asyncio.run(run())
+
+
 def test_malformed_requests_and_image_limits_are_errors_without_hardware(tmp_path):
     async def run():
         service = WallService(tmp_path/'settings.json',tmp_path/'captures')

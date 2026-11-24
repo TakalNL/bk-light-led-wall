@@ -61,13 +61,23 @@ are not uploaded with normal content.
 - **Open image / GIF** fits content to the whole canvas before splitting it.
   Fit preserves the whole image with black padding; Fill crops to cover the
   canvas; Stretch resizes to its dimensions. Transparency is composited on black.
-  GIF disposal and frame durations are decoded by Pillow; animations loop.
+  Pillow handles resizing, GIF disposal, transparency and encoding. Large sources
+  are filtered when reduced; small pixel art stays crisp when enlarged.
+  Animated GIFs are automatically cropped around bezel gaps and rotated into one
+  native 64x16 GIF per panel, uploaded once, then restarted concurrently. Playback
+  runs on the panels, without the streamer's 10-fps ceiling. Starts are approximate,
+  not a shared hardware clock; a small lead or drift can remain. Source timing is
+  preserved; frames faster than 30 ms are sampled without slowing the full loop.
+  Pause sends the current preview frame; Play uploads and restarts the loop.
+  A gap or fit change automatically rebuilds the panel GIFs. Each generated panel
+  GIF is limited to 2 MiB. An oversized animation reports an error before uploading.
 - **Pause / Play** freezes/resumes animation. **Clear** sends black.
 
-Content can be previewed locally while disconnected. GIFs stream from the PC
-as RGB PNG frames, so the controller must remain running. Short GIF frames may
-be skipped at the wall's 10-fps target. Up to 1,000 decoded frames and 16 million
-output pixels are retained in memory.
+Content can be previewed locally while disconnected. Native GIFs can continue
+after disconnecting; the preview is an approximation, not LED readback. Games and
+the seam demo still stream from the PC. Up to 1,000 decoded frames and 16 million
+output pixels are retained in memory. To open media at startup, use
+`python -m games.wall.app --media path/to/animation.gif --connect`.
 
 ## Connection behavior
 

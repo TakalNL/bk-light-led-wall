@@ -23,6 +23,7 @@ from PIL import Image, UnidentifiedImageError
 
 from .service import Conflict, WallService
 from .wall import load_media
+from .native_animation import prepare_animation
 
 SERVICE = web.AppKey('service', WallService)
 TOKEN = web.AppKey('token', str)
@@ -118,7 +119,8 @@ async def operation(request):
             if mode not in ('Fit', 'Fill', 'Stretch'):
                 raise ValueError('Choose Fit, Fill or Stretch.')
             data = await request.read()
-            size = service.render_layout.size
+            layout = service.render_layout
+            size = layout.size
 
             def decode():
                 try:
@@ -128,12 +130,16 @@ async def operation(request):
                         count = getattr(source, 'n_frames', 1)
                         if source.width*source.height*count > 16_000_000:
                             raise ValueError('Media is too large. Use smaller images or fewer frames.')
-                    return load_media(BytesIO(data), size, mode)
+                    frames, deadlines = load_media(BytesIO(data), size, mode)
+                    animation = (prepare_animation(frames, deadlines, layout)
+                                 if len(frames) > 1 else None)
+                    return frames, deadlines, animation
                 except (UnidentifiedImageError, Image.DecompressionBombError) as error:
                     raise ValueError('This file could not be opened as a supported image.') from error
 
-            frames, deadlines = await asyncio.to_thread(decode)
+            frames, deadlines, animation = await asyncio.to_thread(decode)
             service.media_frames, service.media_deadlines = frames, deadlines
+            service.media_animation = animation
             service.set_mode('media')
         else:
             data = await request.json() if request.can_read_body else {}

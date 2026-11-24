@@ -23,6 +23,7 @@ from games.micromaze.game import Maze, render_view
 from games.snake.game import Snake, render_board
 from games.starfall.game import Shooter, render_flight
 from .discovery import scan
+from .native_animation import NativePlayback
 from .wall import (CanvasFrame, Layout, Tile, demo_image, fit_image, identify_image,
                    load_layout, png_bytes, save_layout)
 
@@ -68,10 +69,13 @@ class WallService:
         self.mode, self.game, self.owner = 'identify', None, None
         self.keys, self.last_input = set(), 0.0
         self.media_frames, self.media_deadlines = [], []
+        self.media_animation = self.media_request = None
+        self.media_generation = 0
         self.media_playing, self.media_elapsed = True, 0.0
         self.epoch, self.tick_number = self.clock(), 0
         self.image = Image.new('RGB', (64, 16))
         self.preview_png, self.preview_version = png_bytes(self.image), 0
+        self.preview_frame = None
         self.task = None
         self.operation_lock = asyncio.Lock()
 
@@ -110,7 +114,8 @@ class WallService:
                     score=getattr(self.game, 'score', 0), controller=self.owner,
                     timing_alignment=self.alignment.is_set(), stats=self.stats,
                     preview_version=self.preview_version, scanning=self.scanning,
-                    media_loaded=bool(self.media_frames), media_playing=self.media_playing)
+                    media_loaded=bool(self.media_frames), media_playing=self.media_playing,
+                    media_native=self.mode == 'media' and self.media_animation is not None)
 
     def set_layout(self, data):
         if self.worker:
@@ -121,6 +126,7 @@ class WallService:
         self.excluded.intersection_update(t.device for t in layout.tiles)
         self._save_preferences()
         self.media_frames, self.media_deadlines = [], []
+        self.media_animation = self.media_request = None
         self.set_mode('identify')
         self.error = None
         return self.state()
@@ -173,6 +179,7 @@ class WallService:
         # Games restart paused on the resized canvas; decoded media must be
         # uploaded again because it was fitted to the previous dimensions.
         self.media_frames, self.media_deadlines = [], []
+        self.media_animation = self.media_request = None
         mode = 'identify' if self.mode == 'media' else self.mode
         if mode == 'snake':
             layout = self.render_layout
@@ -288,7 +295,14 @@ class WallService:
         self.mode, self.game, self.epoch, self.tick_number = mode, game, self.clock(), 0
         self.media_elapsed = 0.0
         self.media_playing = True
+        if mode == 'media' and self.media_animation:
+            self._restart_media()
         self.render()
+
+    def _restart_media(self):
+        self.media_elapsed = 0.0
+        self.media_generation += 1
+        self.media_request = NativePlayback(self.media_animation, self.media_generation)
 
     def game_action(self, client, action):
         self.require_owner(client)
@@ -306,8 +320,12 @@ class WallService:
         elif self.mode == 'media':
             if action == 'restart':
                 self.media_elapsed = 0
+                if self.media_animation:
+                    self.media_playing = True
             else:
                 self.media_playing = not self.media_playing if action == 'toggle' else False
+            if self.media_animation and self.media_playing:
+                self._restart_media()
         self.render()
 
     def render(self):
@@ -329,11 +347,14 @@ class WallService:
         else:
             image = Image.new('RGB', layout.size)
         frame = CanvasFrame.from_image(image, layout=layout)
-        if frame != self.mailbox.read()[1]:
+        if frame != self.preview_frame:
+            self.preview_frame = frame
             self.image = layout.preview(image)
             self.preview_png = png_bytes(self.image)
             self.preview_version += 1
-            self.mailbox.publish(frame)
+        request = (self.media_request if self.mode == 'media' and self.media_playing
+                   and self.media_animation else frame)
+        self.mailbox.publish(request)
 
     def _events(self):
         while True:
@@ -347,6 +368,12 @@ class WallService:
                 self.progress = data['message']
             elif kind == 'frame':
                 self.stats = data
+            elif kind == 'native_playing':
+                if (self.mode == 'media' and self.media_playing and self.media_request
+                        and data['generation'] == self.media_request.generation):
+                    self.media_elapsed = 0.0
+                    self.stats = dict(data, playback='native')
+                    self.progress = 'Animation playing on the panels. Starts are approximately synchronized.'
             elif kind == 'error':
                 self.error = data['message']
                 self.release(self.owner)

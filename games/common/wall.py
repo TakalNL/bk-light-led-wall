@@ -6,6 +6,7 @@ from contextlib import AsyncExitStack
 from statistics import median
 
 from led_matrix_hacker.wall import png_bytes
+from led_matrix_hacker.native_animation import NativePlayback, animation_plan
 
 from .panel import PanelWorker
 
@@ -28,6 +29,51 @@ class PanelTiming:
         # Never hold a frame indefinitely when a connection stalls. A median
         # rejects isolated slow replies rather than delaying every other panel.
         return [min(.250, max(0.0, slowest-estimate)) for estimate in estimates]
+
+
+async def play_native(links, request, mailbox, version, stop, emit, record):
+    """Upload every tile once, then restart them concurrently on the same links."""
+    from pypixelcolor.lib.transport.send_plan import single_window_plan
+
+    animation = request.animation
+    if len(animation.gifs) != len(links):
+        raise ValueError('Every connected panel needs its own GIF.')
+    prepared = [animation_plan(data) for data in animation.gifs]
+    emit('progress', message='Uploading animation to all panels...')
+    record('native_upload_started', version=version,
+           panel_bytes=[len(data) for data in animation.gifs],
+           frames=animation.frame_count, duration_ms=animation.duration_ms)
+
+    async def send(index, plan, timeout):
+        if stop.is_set():
+            raise asyncio.CancelledError
+        try:
+            _, _, replies = await links[index].send(plan, response=True, timeout=timeout)
+            if replies[-1:] != [bytes.fromhex('0500030003')]:
+                raise ValueError('Missing expected GIF completion reply.')
+        except Exception as error:
+            raise ConnectionError(f'Panel {index+1}: {error}') from error
+
+    async def together(plans, timeout):
+        try:
+            async with asyncio.TaskGroup() as group:
+                for index, plan in enumerate(plans):
+                    group.create_task(send(index, plan, timeout))
+        except ExceptionGroup as errors:
+            raise errors.exceptions[0] from errors
+
+    await together([plan for plan, _ in prepared], 180)
+    # A newer selection/pause/resize supersedes this upload. Drain uploads before
+    # switching commands, and never restart stale content after the user moved on.
+    if stop.is_set() or mailbox.read()[0] != version:
+        record('native_upload_superseded', version=version)
+        return
+    restarts = [single_window_plan('native_gif_restart', restart) for _, restart in prepared]
+    await together(restarts, 10)
+    data = dict(version=version, generation=request.generation, frames=animation.frame_count,
+                duration_ms=animation.duration_ms, panel_bytes=[len(gif) for gif in animation.gifs])
+    record('native_playing', **data)
+    emit('native_playing', **data)
 
 
 async def stream_canvas(links, layout, mailbox, stop, emit, record, *, fps=10,
@@ -81,6 +127,13 @@ async def stream_canvas(links, layout, mailbox, stop, emit, record, *, fps=10,
             record('wall_layout_changed', dimensions=list(frame_layout.size),
                    panel_boxes=[list(t.box) for t in frame_layout.tiles])
             current_layout = frame_layout
+        if isinstance(frame, NativePlayback):
+            await play_native(links, frame, mailbox, latest, stop, emit, record)
+            version = latest
+            next_due = 0.0
+            # Native playback owns the panel clocks until a new mailbox request.
+            # Nothing is streamed or periodically restarted during the loop.
+            continue
         images = frame_layout.split(frame.image())
         plans = [send_image_hex(png_bytes(image).hex(), '.png', save_slot=0, device_info=info)
                  for image, info in zip(images, device_infos)]

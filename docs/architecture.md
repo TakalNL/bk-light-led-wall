@@ -50,6 +50,23 @@ geometry after the in-flight canvas finishes. The web UI currently requires
 disconnection for manual position/gap edits. Both require a new worker when
 changing panel identities/order.
 
+Animated media uses `native_animation.py` and Pillow to encode one native 64x16
+GIF per tile after fitting the complete canvas, omitting gap pixels and undoing
+mounting rotation. Immutable `NativePlayback` requests share the worker mailbox
+with RGB frames. The worker drains any current upload, uploads all panel GIFs
+with the temporary 0x65 preview destination, validates completion replies, then
+sends their individual 15-byte restart headers concurrently. No ongoing frame
+uploads or periodic restarts occur during native playback. Starts are approximate;
+there is no shared device clock. A newer selection supersedes an upload before
+restart. Any failed transfer cancels siblings and closes the session.
+
+The shared timeline preserves GIF durations; requests faster than the observed
+30-ms decoder floor are sampled on a 30-ms timeline while retaining loop length.
+Pillow may merge identical panel frames but their encoded loop durations must
+match. Encoding uses a global palette per panel and a 2-MiB per-panel limit.
+Pausing publishes an RGB snapshot; playing again uploads/restarts the animation.
+The software preview runs separately and resets its epoch after the restart ACKs.
+
 ## Backend responsibilities
 
 The dependency is pinned to pypixelcolor commit
@@ -69,7 +86,7 @@ not the public Client lifecycle. The public AsyncClient has separate hardware
 checks. The [chunk-size contribution](../patches/README.md) is independent;
 its submission does not imply a current upstream merge status.
 
-Normal uploads use acknowledged writes, RGB PNGs and non-saving slot 0, with
+Live frame uploads use acknowledged writes, RGB PNGs and non-saving slot 0, with
 chunks up to 500 bytes bounded by the connection's supported limits. Full raw
 RGB, indexed PNGs, fast writes and pipelining are not alternate production paths.
 

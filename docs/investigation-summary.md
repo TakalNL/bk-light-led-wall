@@ -11,7 +11,7 @@ other batches or every device supported by iPixel Color.
 | --- | --- | --- |
 | Can I control it without the vendor app? | Yes, through Python and the existing pypixelcolor protocol/library. | Our Windows web controller adds discovery, setup, media and phone access. |
 | Can two panels act as one screen? | Yes, with separate BLE links and a host-rendered shared canvas. | Position, mounting rotation and bezel compensation work; only two physical panels have been tested. |
-| Can it play without the host? | Native uploaded GIFs and a native clock continued after Bluetooth disconnected. | Autonomous playback exists, but the web controller currently streams its content and must stay running. |
+| Can it play without the host? | Native uploaded GIFs and a native clock continued after Bluetooth disconnected. | Opening an animated GIF in the wall or web controller now prepares and uploads native panel GIFs. Games and the seam demo still require host streaming. |
 | Does saved content survive power loss? | Two original GIFs survived USB power loss and automatically played as a playlist. | Persistent native content is possible; total capacity and arbitrary slot behavior are not established. |
 | Can saved GIFs be selected without uploading again? | A/B/A switching in ordinary slots 1/2 worked with seven-byte commands, including recall after Bluetooth reconnect. | It worked from native GIF playback; the same selector did not replace a temporary HOLD PNG. Display mode matters. |
 | Can two native GIFs start together? | Concurrent short restart headers brought deliberately offset loops close together, with a small remaining visible lead. | Useful approximate coordination; no deferred upload/start or atomic synchronized swap was demonstrated. |

@@ -504,3 +504,29 @@ Internal cleanup/publication records are retained privately; technical evidence
 and current verification remain in this report.
 Current-file redaction does not remove the addresses from earlier Git commits;
 the prepared public source snapshot excludes Git history and private artifacts.
+
+## Automatic native wall GIF playback, 2026-11-24
+
+The desktop wall and browser media upload now use Pillow to fit the complete
+canvas, split around bezel gaps, undo mounting rotation and encode a native
+64x16 GIF per panel. The production worker uploads these with the verified
+temporary 0x65 preview destination, validates each GIF completion, then sends
+the corresponding restart headers concurrently. Native playback sends no
+ongoing PNG frames. Pause publishes a snapshot; Play uploads/restarts the loop.
+
+Hardware capture `captures/wall-ui-20261124-215936-995943.jsonl` records two
+connected panels on a 64x35 canvas with a three-pixel gap. The smooth vortex
+source contains 660 frames at 30 ms, a 19.8-second loop; the prepared panel GIFs
+are 593,900 and 599,731 bytes. Upload and restart completed in 69.86 seconds,
+passing strict `0500030003` completion checks on both panels at both stages.
+The log then remains at `native_playing`, with no subsequent frame uploads.
+Source SHA256: `8303f470c70b5b1646e59d35d212b51e99b6abe5b6b17507602d7b7baa9f19be`.
+This verifies the larger multi-window preview/restart transport through the
+production worker, not exact optical FPS, frame completeness or seam timing.
+
+Automated validation: 368 passed, four existing isolated-PR skips. New cases
+cover fitted crops, hidden gap pixels, all mounting rotations, common loop
+timing with a static panel half, fast-source sampling, GIF transparency/disposal,
+multi-window lengths/CRC/restart headers, upload/restart barriers, failures,
+superseded requests, no ongoing native writes, desktop pause/refit/restart and
+browser media upload/playback transitions. Browser JavaScript syntax also passed.

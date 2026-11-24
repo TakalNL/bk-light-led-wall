@@ -157,14 +157,18 @@ def fit_image(image, size, mode='Fit'):
     rgba = image.convert('RGBA')
     background = Image.new('RGBA', rgba.size, (0, 0, 0, 255))
     image = Image.alpha_composite(background, rgba).convert('RGB')
+    # Filter reductions to avoid aliasing in photos/large GIFs. Keep pixel art
+    # crisp when expanding a small source onto the wall.
+    resampling = (Image.Resampling.LANCZOS if image.width > size[0] or image.height > size[1]
+                  else Image.Resampling.NEAREST)
     if mode == 'Fill':
-        return ImageOps.fit(image, size, method=Image.Resampling.NEAREST)
+        return ImageOps.fit(image, size, method=resampling)
     if mode == 'Stretch':
-        return image.resize(size, Image.Resampling.NEAREST)
+        return image.resize(size, resampling)
     if mode != 'Fit':
         raise ValueError('Choose Fit, Fill or Stretch.')
     result = Image.new('RGB', size)
-    fitted = ImageOps.contain(image, size, method=Image.Resampling.NEAREST)
+    fitted = ImageOps.contain(image, size, method=resampling)
     result.paste(fitted, ((size[0]-fitted.width)//2, (size[1]-fitted.height)//2))
     return result
 
